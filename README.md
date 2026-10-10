@@ -16,7 +16,7 @@ It is for one admin running it on their own host for their own public repositori
 
 - **Webhook endpoint**, one per registered repository: `POST /hooks/<repo>`. GitHub calls it on push.
 - **Web UI**, the only control surface: home (repositories and recent jobs), job page (details and transcript), and the Build now and Stop actions. There is no CLI. Anything the UI can't do is a config edit and a restart.
-- **Server config file**, edited by the admin: registered repositories with their webhook secrets, cache target, signing key path, glob cap, job timeout, retention, and GitHub token.
+- **Server config file**, edited by the admin: registered repositories with their webhook secrets, cache target, signing key path, glob cap, global build cap, job timeout, retention, and GitHub token.
 - **Build-list file** in each repository (`.freezer.yaml`): the repository's build list, and nothing else.
 
 **External pieces**
@@ -72,6 +72,6 @@ The decided look is Clearlooks (GNOME 2 era) chrome as structure, not costume: o
 ## Documents
 
 - [GLOSSARY.md](GLOSSARY.md): the vocabulary. Use these terms, and avoid the alternatives listed under each.
-- [ROADMAP.md](ROADMAP.md): phases, acceptance lists, deferred work, and open questions.
+- [ROADMAP.md](ROADMAP.md): phases, acceptance lists, deferred work, and resolved questions.
 - [docs/adr/](docs/adr/): decisions and why they were made.
 - [docs/design/](docs/design/): the UI spec and its prototype.

@@ -65,9 +65,9 @@ UI acceptance criteria are in [docs/design/freezer-ui-clearlooks.md](docs/design
 
 Each of these is either recorded as a limitation in an ADR or a decision not to build something; none of them is half-built and waiting.
 
-## Open questions
+## Resolved questions
 
-These were open forks in the design. ADR 0019 and ADR 0004 already answer them: confirm each answer, or supersede the ADR, before v1.
+These were open forks in the design. The owner confirmed ADR 0019 and ADR 0004 as written on 2026-10-10, so both answers stand for v1.
 
 - **Global build cap.** Is there a server-wide cap on concurrent builds across repositories, or only per-repository serialization plus the per-event glob cap? ADR 0019 adds a global cap (config).
 - **Concurrency inside an event.** Do one event's jobs build concurrently, or one after another? ADR 0019 answers: concurrently, bounded by the global cap.

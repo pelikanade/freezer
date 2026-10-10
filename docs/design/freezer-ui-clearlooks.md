@@ -268,7 +268,7 @@ Primary: CSS-only — wrap the transcript in a flex column-reverse scroller so t
 
 ---
 
-## 8. Decisions (Noa, 2026-10-08) and remaining open questions
+## 8. Decisions (Noa, 2026-10-08 and 2026-10-10)
 
 **Decided:**
 
@@ -277,12 +277,9 @@ Primary: CSS-only — wrap the transcript in a flex column-reverse scroller so t
 3. **Queued builds:** show them. Expose the build waiting for its turn per repo (read-only) so the index can show a "queued" row per repo (received time, plus the pushed sha if the event carries one; the head is still resolved through git at build start) above that repo's running job. A queued row is not a job row — give it its own status icon and the word "queued". Superseded events simply disappear (the slot holds only the newest).
 4. **Paging:** the job list gets paging. Keep 100 (or fewer) per page; add Newer / Older links in the jobs treeview footer and statusbar (`/?page=N` or `?before={id}`; keyset on id preferred). Commit grouping applies within a page.
 5. **Transcript line numbers + error tint:** ship in v1. One element per line (≤2000); error lines (`error:` prefix, `failed with exit code`) get the red tint plus a non-colour marker (bold or ⚠ gutter) so colour isn't the only cue. The plain-text transcript link stays.
-
-**Still open (mock's defaults stand unless Noa says otherwise):**
-
-6. **Titlebar:** keep the CSS Metacity-style title bar (default) or drop it.
-7. **Icons:** original Tango-palette SVGs (default) vs text-only marks.
-8. **Index order:** repositories above jobs (default) or jobs first.
+6. **Titlebar:** keep the CSS Metacity-style title bar, as in the mock.
+7. **Icons:** original Tango-palette SVGs, as in the mock. No icon-theme files vendored.
+8. **Index order:** repositories above jobs, as in the mock and the README's home order.
 
 ---
 
