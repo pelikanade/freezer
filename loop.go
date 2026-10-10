@@ -74,8 +74,10 @@ func runCommand(ctx context.Context, transcript io.Writer, name string, args ...
 }
 
 func runNix(ctx context.Context, transcript io.Writer, args ...string) (string, error) {
-	args = append(args, "--extra-experimental-features", "nix-command flakes", "--option", "narinfo-cache-positive-ttl", "0", "--option", "narinfo-cache-negative-ttl", "0", "--no-write-lock-file")
-	return runCommand(ctx, transcript, "nix", args...)
+	command := make([]string, 0, len(args)+9)
+	command = append(command, args[0], "--extra-experimental-features", "nix-command flakes", "--option", "narinfo-cache-positive-ttl", "0", "--option", "narinfo-cache-negative-ttl", "0", "--no-write-lock-file")
+	command = append(command, args[1:]...)
+	return runCommand(ctx, transcript, "nix", command...)
 }
 
 func RunLoop(ctx context.Context, cfg Config, flake string, entries []string, force bool) []Result {
@@ -109,7 +111,7 @@ func expandEntries(ctx context.Context, cfg Config, flake string, entries []stri
 		}
 		jobCtx, cancel := context.WithTimeout(ctx, cfg.JobTimeout)
 		var transcript bytes.Buffer
-		output, err := runNix(jobCtx, &transcript, "eval", "--json", flake+"#"+prefix, "--apply", "builtins.attrNames", "--option", "allow-import-from-derivation", "false")
+		output, err := runNix(jobCtx, &transcript, "eval", "--json", "--apply", "builtins.attrNames", "--option", "allow-import-from-derivation", "false", "--", flake+"#"+prefix)
 		cancel()
 		var names []string
 		if err == nil {
@@ -166,16 +168,16 @@ func RunJob(ctx context.Context, cfg Config, flake, entry string, force bool, re
 	if record != nil {
 		stream = io.MultiWriter(&transcript, record)
 	}
-	out, err := runNix(ctx, stream, "eval", "--raw", flake+"#"+entry+".outPath", "--option", "allow-import-from-derivation", "false")
+	out, err := runNix(ctx, stream, "eval", "--raw", "--option", "allow-import-from-derivation", "false", "--", flake+"#"+entry+".outPath")
 	if err == nil && !force {
-		if _, err = runNix(ctx, stream, "path-info", "--store", cfg.Cache.StoreURL(), out); err == nil {
+		if published, probeErr := runNix(ctx, stream, "path-info", "--store", cfg.Cache.StoreURL(), "--", out); probeErr == nil && published == out {
 			result.CacheHit = true
 			result.Transcript = transcript.String()
 			return result
 		}
 	}
 	copyStart := transcript.Len()
-	_, err = runNix(ctx, stream, "copy", "--to", cfg.Cache.StoreURL(), "--print-build-logs", flake+"#"+entry)
+	_, err = runNix(ctx, stream, "copy", "--to", cfg.Cache.StoreURL(), "--print-build-logs", "--", flake+"#"+entry)
 	if err != nil {
 		result.Status = "failed"
 		detail := transcript.Bytes()[copyStart:]

@@ -54,6 +54,7 @@
         exit 1
       '';
       notDerivation = 42;
+      optionPath = { outPath = "--version"; };
     };
     selected.${system} = {
       alpha = self.packages.${system}.hello;

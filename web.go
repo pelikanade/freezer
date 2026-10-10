@@ -5,7 +5,6 @@ import (
 	"embed"
 	"fmt"
 	"html/template"
-	"io/fs"
 	"net/http"
 	"strconv"
 	"strings"
@@ -74,7 +73,6 @@ var pages = template.Must(template.New("pages").Funcs(template.FuncMap{
 		}
 		return s
 	},
-	"inc": func(n int) int { return n + 1 },
 }).ParseFS(webFiles, "web/*.html"))
 
 func jobDuration(j Job) string {
@@ -142,8 +140,7 @@ func resultSummary(r Result) string {
 
 func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
-	static, _ := fs.Sub(webFiles, "web")
-	mux.Handle("GET /static/", http.StripPrefix("/static/", http.FileServerFS(static)))
+	mux.HandleFunc("GET /static/style.css", func(w http.ResponseWriter, r *http.Request) { http.ServeFileFS(w, r, webFiles, "web/style.css") })
 	mux.HandleFunc("GET /{$}", s.index)
 	mux.HandleFunc("GET /jobs/{id}", s.jobPage)
 	mux.HandleFunc("GET /jobs/{id}/log", s.jobTranscript)

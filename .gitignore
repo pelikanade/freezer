@@ -11,3 +11,7 @@ devenv.local.yaml
 
 # project map (local status board)
 .project-map/
+
+# Nix build results
+/result
+/result-*

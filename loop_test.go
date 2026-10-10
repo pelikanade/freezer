@@ -284,3 +284,11 @@ func TestMatchedNothingAndTimeout(t *testing.T) {
 		t.Fatalf("timeout did not bound the job: %+v", results)
 	}
 }
+
+func TestOptionLikeOutputCannotBecomeCacheHit(t *testing.T) {
+	f := newFixture(t)
+	results := RunLoop(context.Background(), f.config(), f.repo(), []string{f.entry("optionPath")}, false)
+	if len(results) != 1 || results[0].CacheHit || results[0].Status != "failed" || !strings.Contains(results[0].Transcript, "$ nix copy") {
+		t.Fatalf("option-like output bypassed publication: %+v", results)
+	}
+}
