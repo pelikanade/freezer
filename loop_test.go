@@ -15,6 +15,17 @@ import (
 
 var nixTestOptions = []string{"--extra-experimental-features", "nix-command flakes", "--option", "narinfo-cache-positive-ttl", "0", "--option", "narinfo-cache-negative-ttl", "0"}
 
+func RunLoop(ctx context.Context, cfg Config, flake string, entries []string, force bool) []Result {
+	results := expandEntries(ctx, cfg, flake, entries)
+	for i, planned := range results {
+		if planned.Status == "" {
+			results[i] = RunJob(ctx, cfg, flake, planned.Entry, force, nil)
+			results[i].Transcript = planned.Transcript + results[i].Transcript
+		}
+	}
+	return results
+}
+
 type fixture struct {
 	dir, system, key, publicKey, store, endpoint, bucket string
 }

@@ -73,6 +73,8 @@ The decided look is Clearlooks (GNOME 2 era) chrome as structure, not costume: o
 
 Run `devenv test` with the host Nix daemon available (Nix 2.34 is tested). It starts a loopback Silo S3 service, runs the end-to-end tests, and records current results in `.devenv/acceptance.log`. Tests use throwaway Git repositories, a locked static BusyBox fixture input, fresh signing keys and scratch Nix stores. The test bucket is cleared before each test. Do not point this environment at a production bucket.
 
+`service.go` owns production scheduling. `loop.go` expands entries and executes individual jobs. The sequential `RunLoop` helper lives in `loop_test.go` for acceptance tests only.
+
 Repository build lists use one YAML document with an `entries` list:
 
 ```yaml

@@ -80,20 +80,6 @@ func runNix(ctx context.Context, transcript io.Writer, args ...string) (string, 
 	return runCommand(ctx, transcript, "nix", command...)
 }
 
-func RunLoop(ctx context.Context, cfg Config, flake string, entries []string, force bool) []Result {
-	results := make([]Result, 0, len(entries))
-	for _, planned := range expandEntries(ctx, cfg, flake, entries) {
-		if planned.Status != "" {
-			results = append(results, planned)
-			continue
-		}
-		result := RunJob(ctx, cfg, flake, planned.Entry, force, nil)
-		result.Transcript = planned.Transcript + result.Transcript
-		results = append(results, result)
-	}
-	return results
-}
-
 func expandEntries(ctx context.Context, cfg Config, flake string, entries []string) []Result {
 	var jobs []Result
 	expanded := 0

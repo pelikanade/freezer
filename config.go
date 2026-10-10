@@ -86,16 +86,12 @@ func LoadConfig(filename string) (Config, error) {
 	if cfg.Cache.SigningKey == "" {
 		return cfg, fmt.Errorf("cache.signing_key is required")
 	}
-	if !filepath.IsAbs(cfg.Cache.SigningKey) {
-		cfg.Cache.SigningKey, err = filepath.Abs(filepath.Join(filepath.Dir(filename), cfg.Cache.SigningKey))
-		if err != nil {
-			return cfg, err
-		}
-	}
-	if !filepath.IsAbs(cfg.StateDir) {
-		cfg.StateDir, err = filepath.Abs(filepath.Join(filepath.Dir(filename), cfg.StateDir))
-		if err != nil {
-			return cfg, err
+	for _, filenamePath := range []*string{&cfg.Cache.SigningKey, &cfg.StateDir} {
+		if !filepath.IsAbs(*filenamePath) {
+			*filenamePath, err = filepath.Abs(filepath.Join(filepath.Dir(filename), *filenamePath))
+			if err != nil {
+				return cfg, err
+			}
 		}
 	}
 	if cfg.GitHubToken == "" {

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"html/template"
 	"net/http"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -34,19 +35,19 @@ type transcriptLine struct {
 	Text, Class string
 }
 type pageData struct {
-	Kind, Title, Path, ToggleURL, ReloadURL string
-	Paused, Busy                            bool
-	Refresh, Running, Queued                int
-	Repositories                            []repositoryView
-	Groups                                  []jobGroup
-	Job                                     *Job
-	Lines                                   []transcriptLine
-	TotalLines                              int
-	Older, Newer                            string
-	Notice, NoticeDetail                    string
-	Code                                    int
-	ErrorTitle, ErrorDetail                 string
-	Now                                     string
+	Kind, Title, ToggleURL, ReloadURL string
+	Paused, Busy                      bool
+	Refresh, Running, Queued          int
+	Repositories                      []repositoryView
+	Groups                            []jobGroup
+	Job                               *Job
+	Lines                             []transcriptLine
+	TotalLines                        int
+	Older, Newer                      string
+	Notice, NoticeDetail              string
+	Code                              int
+	ErrorTitle, ErrorDetail           string
+	Now                               string
 }
 
 var pages = template.Must(template.New("pages").Funcs(template.FuncMap{
@@ -176,7 +177,7 @@ func pageFor(r *http.Request, title, kind string) pageData {
 	if encoded := query.Encode(); encoded != "" {
 		toggle += "?" + encoded
 	}
-	p := pageData{Title: title, Kind: kind, Path: r.URL.Path, Paused: paused, ToggleURL: toggle, ReloadURL: reload, Now: time.Now().UTC().Format("2006-01-02 15:04:05 UTC")}
+	p := pageData{Title: title, Kind: kind, Paused: paused, ToggleURL: toggle, ReloadURL: reload, Now: time.Now().UTC().Format("2006-01-02 15:04:05 UTC")}
 	switch r.URL.Query().Get("notice") {
 	case "build":
 		p.Notice = "Build requested for " + r.URL.Query().Get("repo") + "."
@@ -188,7 +189,7 @@ func pageFor(r *http.Request, title, kind string) pageData {
 	return p
 }
 
-func (s *Server) render(w http.ResponseWriter, r *http.Request, code int, p pageData) {
+func (s *Server) render(w http.ResponseWriter, code int, p pageData) {
 	var body bytes.Buffer
 	if err := pages.ExecuteTemplate(&body, "page", p); err != nil {
 		http.Error(w, "Could not render page", 500)
@@ -214,22 +215,22 @@ func (s *Server) index(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}
-	query := s.db.Omit("transcript").Order("id DESC").Limit(pageSize)
+	query := s.db.Omit("transcript").Limit(pageSize)
+	order := "id DESC"
 	if before != "" {
 		query = query.Where("id < ?", before)
 	}
 	if after != "" {
-		query = s.db.Omit("transcript").Order("id ASC").Limit(pageSize).Where("id > ?", after)
+		query = query.Where("id > ?", after)
+		order = "id ASC"
 	}
 	var jobs []Job
-	if err := query.Find(&jobs).Error; err != nil {
+	if err := query.Order(order).Find(&jobs).Error; err != nil {
 		s.errorPage(w, r, 500, "Could not read jobs", err.Error())
 		return
 	}
 	if after != "" {
-		for i, j := 0, len(jobs)-1; i < j; i, j = i+1, j-1 {
-			jobs[i], jobs[j] = jobs[j], jobs[i]
-		}
+		slices.Reverse(jobs)
 	}
 	for _, repo := range s.cfg.Repositories {
 		view := repositoryView{Repository: repo}
@@ -294,30 +295,27 @@ func (s *Server) index(w http.ResponseWriter, r *http.Request) {
 	}
 	if len(jobs) > 0 {
 		var count int64
-		if err := s.db.Model(&Job{}).Where("id > ?", jobs[0].ID).Count(&count).Error; err != nil {
-			s.errorPage(w, r, 500, "Could not read page", err.Error())
-			return
-		}
-		if count > 0 {
-			p.Newer = "/?after=" + strconv.FormatUint(jobs[0].ID, 10)
-		}
-		if err := s.db.Model(&Job{}).Where("id < ?", jobs[len(jobs)-1].ID).Count(&count).Error; err != nil {
-			s.errorPage(w, r, 500, "Could not read page", err.Error())
-			return
-		}
-		if count > 0 {
-			p.Older = "/?before=" + strconv.FormatUint(jobs[len(jobs)-1].ID, 10)
-		}
-	}
-	if p.Paused {
-		if p.Newer != "" {
-			p.Newer += "&refresh=0"
-		}
-		if p.Older != "" {
-			p.Older += "&refresh=0"
+		for _, page := range []struct {
+			condition, cursor string
+			id                uint64
+			link              *string
+		}{
+			{"id > ?", "after", jobs[0].ID, &p.Newer},
+			{"id < ?", "before", jobs[len(jobs)-1].ID, &p.Older},
+		} {
+			if err := s.db.Model(&Job{}).Where(page.condition, page.id).Count(&count).Error; err != nil {
+				s.errorPage(w, r, 500, "Could not read page", err.Error())
+				return
+			}
+			if count > 0 {
+				*page.link = "/?" + page.cursor + "=" + strconv.FormatUint(page.id, 10)
+				if p.Paused {
+					*page.link += "&refresh=0"
+				}
+			}
 		}
 	}
-	s.render(w, r, 200, p)
+	s.render(w, 200, p)
 }
 
 func (s *Server) jobPage(w http.ResponseWriter, r *http.Request) {
@@ -363,7 +361,7 @@ func (s *Server) jobPage(w http.ResponseWriter, r *http.Request) {
 			number++
 		}
 	}
-	s.render(w, r, 200, p)
+	s.render(w, 200, p)
 }
 
 func (s *Server) jobTranscript(w http.ResponseWriter, r *http.Request) {
@@ -381,5 +379,5 @@ func (s *Server) errorPage(w http.ResponseWriter, r *http.Request, code int, tit
 	p.Code = code
 	p.ErrorTitle = title
 	p.ErrorDetail = detail
-	s.render(w, r, code, p)
+	s.render(w, code, p)
 }
