@@ -1,0 +1,612 @@
+<!doctype html>
+<!--
+  Freezer web UI — Clearlooks / GNOME 2 redesign mock (2026-10-08).
+  Static design artifact for the spec docs/design/freezer-ui-clearlooks.md.
+  No JavaScript, no external fonts or CDNs. Screens switch with :target
+  (#index, #job-running, #job-failed, #job-stopped, #job-interrupted,
+  #job-nothing, #job-hit, #job-truncated, #empty, #e404, #e409). Prefix an id
+  with "shot-" (e.g. #shot-job-failed) to hide the mock palette for screenshots.
+  Icons are original inline-SVG drawings in the Tango palette (Tango is public
+  domain); no third-party icon files are embedded or linked.
+  Data is fake; jobs #1-#8 are the seeded states.
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Jobs · freezer — Clearlooks mock</title>
+<style>
+/* ==========================================================================
+   Freezer · Clearlooks (GNOME 2) — static mock. Not application code.
+   Token sources (see the spec note "Freezer UI (Clearlooks)"):
+   - Clearlooks gtkrc gtk-color-scheme (gnome-themes 2.x): bg #EDECEB,
+     base #FFF, text #1A1A1A, selected_bg #86ABD9, tooltip_bg #F5F5B5
+   - Pixel samples of Commons "Clearlooks 2.20.png" and
+     "Fedoracore5 gnome filebrowser.png" (Clearlooks reference screenshots)
+   - Tango palette (public domain) for ink + status icons
+   - GtkInfoBar default fills/borders (gtk-2-24 gtkinfobar.c)
+   - pelikanade/flake PR #25 quickshell.prototype.html (bevel recipes)
+   ========================================================================== */
+:root {
+  color-scheme: light;
+  /* surfaces */
+  --fz-bg: #edeceb;            /* gtkrc bg_color */
+  --fz-base: #ffffff;          /* gtkrc base_color */
+  --fz-stripe: #f4f3f2;        /* treeview rules-hint row = mix(base, bg) */
+  --fz-prelight: #eaf1fa;      /* row hover: base tinted 15% toward selected */
+  /* ink (Tango Aluminium) */
+  --fz-text: #2e3436;          /* Aluminium 6 — 10.7:1 on bg */
+  --fz-muted: #555753;         /* Aluminium 5 — 6.2:1 on bg, 7.3:1 on base */
+  --fz-dim: #888a85;           /* Aluminium 4 — decoration only, never text */
+  --fz-link: #204a87;          /* Sky Blue 3 — 8.8:1 on base */
+  /* selection / accent */
+  --fz-selected: #86abd9;      /* gtkrc selected_bg_color */
+  --fz-selected-hi: #a9c6ea;   /* top stop of the selection gradient */
+  --fz-accent: #3465a4;        /* Tango Sky Blue 2 — focus ring, progress */
+  --fz-focus: #3465a4;
+  /* edges (sampled Clearlooks 2.20 + QS prototype) */
+  --fz-edge: #8a8680;          /* button / frame outline — 3.1:1 on bg */
+  --fz-edge-soft: #bdbab8;     /* treeview header separators */
+  --fz-etch-dark: #c8c6c4;     /* etched separator dark half */
+  --fz-hilight: #ffffff;
+  /* gradients */
+  --fz-btn: linear-gradient(to bottom, #ffffff 0%, #f6f5f4 45%, #e3e1de 100%);
+  --fz-btn-hover: linear-gradient(to bottom, #f4f8fd 0%, #dfe9f6 45%, #cfddf0 100%); /* prelight = mix(.6, lighter(bg), selected) */
+  --fz-btn-active: linear-gradient(to bottom, #c9c7c4 0%, #dedcd9 100%);            /* shade(.85, bg) */
+  --fz-header: linear-gradient(to bottom, #fcfcfc 0%, #f1f0ef 50%, #e7e6e5 100%);    /* column header, sampled */
+  --fz-toolbar: linear-gradient(to bottom, #f4f3f2 0%, #ebeae9 60%, #e4e3e2 100%);   /* toolbar, sampled */
+  --fz-title: linear-gradient(to bottom, #4f80c2 0%, #3f72b3 48%, #3767a6 52%, #2c5a97 100%); /* Metacity, darkened for AA */
+  --fz-select: linear-gradient(to bottom, var(--fz-selected-hi), var(--fz-selected));
+  --fz-track: linear-gradient(to bottom, #c5c5c5, #efefef);
+  --fz-fill: linear-gradient(to bottom, #9ec4ea 0%, #6d9fd8 45%, #3d74b4 100%);
+  /* GtkInfoBar (gtk 2.24 defaults; error lightened for AA) */
+  --fz-info-bg: #ffffbf;    --fz-info-edge: #b8ad9d;
+  --fz-warn-bg: #fcaf3e;    --fz-warn-edge: #b07a2b;
+  --fz-quest-bg: #c6d8ee;   --fz-quest-edge: #627bd9;
+  --fz-err-bg: #f6cdc9;     --fz-err-edge: #a82727;
+  /* status icon hues (Tango) */
+  --st-ok: #4e9a06; --st-fail: #cc0000; --st-run: #3465a4;
+  --st-stop: #555753; --st-int: #ce5c00; --st-none: #8f5902;
+  /* type */
+  --fz-font: "DejaVu Sans", "Bitstream Vera Sans", Verdana, "Noto Sans", sans-serif;
+  --fz-mono: "DejaVu Sans Mono", "Bitstream Vera Sans Mono", Menlo, Consolas, monospace;
+  --fz-size: 13px;    /* ≈ GNOME "Sans 10" at 96 dpi */
+  --fz-size-sm: 12px; /* statusbar, secondary */
+  --fz-radius: 3px;
+}
+* { box-sizing: border-box; }
+html { background: var(--fz-bg); }
+body { margin: 0; font: var(--fz-size)/1.4 var(--fz-font); color: var(--fz-text); background: var(--fz-bg); }
+a { color: var(--fz-link); }
+a:focus-visible, button:focus-visible, summary:focus-visible, [tabindex]:focus-visible {
+  outline: 2px solid var(--fz-focus); outline-offset: 1px; border-radius: 2px;
+}
+code, .mono { font-family: var(--fz-mono); font-size: 12px; }
+h1, h2 { margin: 0; font-weight: bold; }
+.skip { position: absolute; left: 6px; top: -40px; z-index: 5; background: var(--fz-info-bg); border: 1px solid var(--fz-info-edge); padding: 4px 8px; color: var(--fz-link); }
+.skip:focus { top: 4px; }
+.content:focus { outline: none; }
+.vh { position: absolute !important; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+.ic { width: 16px; height: 16px; flex: none; display: inline-block; vertical-align: -3px; }
+.ic-lg { width: 24px; height: 24px; }
+.ic-xl { width: 32px; height: 32px; }
+.ic-dlg { width: 48px; height: 48px; }
+
+/* ---------- mock-only scaffolding ---------- */
+.proto { font: 12px var(--fz-font); background: #2e3436; color: #eeeeec; padding: 6px 10px; display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: center; }
+.proto b { color: #fce94f; font-weight: normal; }
+.proto a { color: #eeeeec; }
+body:has([id^="shot-"]:target) .proto { display: none; }
+.screen { display: none; min-height: 100vh; flex-direction: column; }
+.screen:target, .screen:has(:target) { display: flex; }
+body:not(:has(.screen:target, .screen :target)) #index { display: flex; }
+
+/* ---------- window chrome ---------- */
+.titlebar {
+  height: 26px; flex: none; display: flex; align-items: center; justify-content: center; position: relative;
+  background: var(--fz-title); color: #fff; font-weight: bold; font-size: 13px;
+  text-shadow: 0 1px 0 rgba(0,0,0,.35);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.4); border-bottom: 1px solid #1f4677;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding: 0 34px;
+}
+.titlebar .ic { position: absolute; left: 6px; top: 5px; filter: drop-shadow(0 1px 0 rgba(0,0,0,.25)); }
+.titlebar span { overflow: hidden; text-overflow: ellipsis; }
+
+.toolbar {
+  flex: none; display: flex; align-items: center; gap: 2px; padding: 3px 6px;
+  background: var(--fz-toolbar); border-bottom: 1px solid #c3c1be; box-shadow: inset 0 1px 0 #fff;
+  overflow-x: auto; scrollbar-width: none;
+}
+.toolbar form { margin: 0; display: contents; }
+.tb {
+  display: inline-flex; align-items: center; gap: 6px; height: 32px; padding: 0 9px;
+  border: 1px solid transparent; border-radius: var(--fz-radius); background: none;
+  font: inherit; color: var(--fz-text); text-decoration: none; cursor: pointer; white-space: nowrap;
+}
+.tb .ic { width: 20px; height: 20px; }
+.tb:hover { border-color: var(--fz-edge); background: var(--fz-btn-hover); box-shadow: inset 0 1px 0 #fff; }
+.tb:active, .tb[aria-pressed="true"] { border-color: #6f6b65; background: var(--fz-btn-active); box-shadow: inset 0 1px 2px rgba(0,0,0,.18); }
+.tb.danger .lbl { font-weight: bold; }
+.tb-sep { width: 0; height: 24px; margin: 0 4px; border-left: 1px solid var(--fz-etch-dark); border-right: 1px solid #fff; flex: none; }
+.tb-spring { flex: 1; }
+.tb-note { color: var(--fz-muted); font-size: var(--fz-size-sm); white-space: nowrap; padding: 0 6px; }
+
+.pathbar {
+  flex: none; display: flex; align-items: center; gap: 3px; padding: 4px 6px;
+  background: var(--fz-bg); border-bottom: 1px solid #c3c1be; overflow-x: auto; scrollbar-width: none;
+}
+.pathbar .lead { color: var(--fz-muted); font-size: var(--fz-size-sm); margin-right: 4px; white-space: nowrap; }
+
+/* ---------- buttons (GtkButton) ---------- */
+.btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 5px;
+  min-height: 26px; padding: 2px 10px; font: inherit; color: var(--fz-text); text-decoration: none; white-space: nowrap;
+  border: 1px solid var(--fz-edge); border-radius: var(--fz-radius); background: var(--fz-btn);
+  box-shadow: inset 0 1px 0 #fff, inset 0 -1px 0 rgba(0,0,0,.04), 0 1px 0 rgba(255,255,255,.7); cursor: pointer;
+}
+.btn:hover { background: var(--fz-btn-hover); border-color: #6f8fb8; }
+.btn:active, .btn[aria-current="page"] { background: var(--fz-btn-active); border-color: #6f6b65; box-shadow: inset 0 1px 2px rgba(0,0,0,.2); }
+.btn-sm { min-height: 22px; padding: 1px 7px; font-size: var(--fz-size-sm); }
+.btn-path[aria-current="page"] { font-weight: bold; background: linear-gradient(to bottom, #e8eff8, #cbdaee); border-color: #6f8fb8; box-shadow: inset 0 1px 0 rgba(255,255,255,.8); }
+.btn-path .ic { width: 16px; height: 16px; }
+.btn-default { box-shadow: inset 0 1px 0 #fff, 0 0 0 1px #9ab3d6; } /* GTK default-button ring */
+
+/* ---------- infobar (GtkInfoBar) ---------- */
+.infobar {
+  flex: none; display: flex; align-items: center; gap: 10px; padding: 7px 12px;
+  border-bottom: 1px solid; font-size: var(--fz-size);
+}
+.infobar .ic-lg { align-self: flex-start; margin-top: 1px; }
+.infobar .msg { flex: 1; min-width: 0; }
+.infobar .msg p { margin: 0; }
+.infobar .msg p + p { margin-top: 1px; }
+.infobar .primary { font-weight: bold; }
+.infobar .acts { display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
+.infobar.info { background: var(--fz-info-bg); border-color: var(--fz-info-edge); }
+.infobar.warning { background: linear-gradient(to bottom, #fdc56e, var(--fz-warn-bg)); border-color: var(--fz-warn-edge); }
+.infobar.question { background: var(--fz-quest-bg); border-color: var(--fz-quest-edge); }
+.infobar.error { background: var(--fz-err-bg); border-color: var(--fz-err-edge); }
+.infobar code { background: rgba(255,255,255,.55); padding: 0 3px; border-radius: 2px; }
+
+/* ---------- content ---------- */
+.content { flex: 1; padding: 12px 14px 18px; }
+.section + .section { margin-top: 16px; }
+.section-head { display: flex; align-items: baseline; gap: 10px; margin-bottom: 6px; }
+.section-head h2 { font-size: 13px; }
+.section-head .aside { color: var(--fz-muted); font-size: var(--fz-size-sm); }
+.section-head .push { margin-left: auto; display: flex; gap: 6px; }
+.hint { color: var(--fz-muted); font-size: var(--fz-size-sm); margin: 5px 0 0; }
+
+/* ---------- treeview (GtkTreeView in a shadow-in GtkScrolledWindow) ---------- */
+.tv { border: 1px solid var(--fz-edge); border-top-color: #77736d; background: var(--fz-base); box-shadow: 0 1px 0 #fff; overflow-x: auto; }
+.tv table { width: 100%; border-collapse: separate; border-spacing: 0; }
+.tv thead th {
+  background: var(--fz-header); font-weight: normal; text-align: left; white-space: nowrap;
+  padding: 3px 7px; height: 24px; border-bottom: 1px solid #a8a5a2; border-right: 1px solid var(--fz-edge-soft);
+  box-shadow: inset 1px 0 0 #fff; color: var(--fz-text); position: sticky; top: 0;
+}
+.tv thead th:last-child { border-right: 0; }
+.tv thead th.sorted::after { content: ""; display: inline-block; margin-left: 6px; border: 4px solid transparent; border-top: 5px solid var(--fz-muted); vertical-align: -2px; }
+.tv td, .tv tbody th { padding: 3px 7px; height: 26px; line-height: 18px; vertical-align: middle; text-align: left; font-weight: normal; }
+.tv tbody:nth-of-type(even) > tr > * { background: var(--fz-stripe); }
+.tv tbody + tbody > tr:first-child > * { border-top: 1px solid #dddbd8; }
+.tv tbody tr:hover > * { background: var(--fz-prelight); }
+.tv tbody tr:focus-within > td, .tv tbody tr.sel > td { background: var(--fz-select); }
+.tv tbody tr:focus-within a, .tv tbody tr.sel a { color: #102a52; }
+.tv .grp { vertical-align: top; padding-top: 4px; white-space: nowrap; border-right: 1px solid #ecebe9; }
+.tv .grp .repo { font-weight: bold; display: flex; align-items: center; gap: 5px; }
+.tv .grp .sha { color: var(--fz-muted); font-weight: normal; }
+.tv .entry a { font-family: var(--fz-mono); font-size: 12px; text-decoration: none; }
+.tv .entry a:hover { text-decoration: underline; }
+.tv .num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.tv .when { white-space: nowrap; font-variant-numeric: tabular-nums; }
+.tv .res { color: var(--fz-muted); max-width: 26ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tv .res.bad { color: #a40000; }
+.tv .act { text-align: right; width: 1%; white-space: nowrap; }
+.tv .act form { margin: 0; }
+.tv .sub { display: none; }
+.tv .id { color: var(--fz-muted); font-variant-numeric: tabular-nums; }
+.tv .never { color: var(--fz-muted); font-style: italic; }
+
+/* status: icon + word, never colour alone */
+.st { display: inline-flex; align-items: center; gap: 5px; white-space: nowrap; }
+.st-failed .w { font-weight: bold; }
+.st-nothing .w, .st-interrupted .w { font-style: italic; }
+
+/* ---------- progress (GtkProgressBar, pulse mode) ---------- */
+.pbar { position: relative; display: inline-block; width: 96px; height: 14px; vertical-align: -3px; border: 1px solid #7a7671; border-radius: 2px; background: var(--fz-track); box-shadow: inset 0 1px 2px rgba(0,0,0,.2); overflow: hidden; }
+.pbar::after {
+  content: ""; position: absolute; top: 0; bottom: 0; width: 34%; left: 0;
+  background: repeating-linear-gradient(135deg, rgba(255,255,255,.28) 0 5px, transparent 5px 10px), var(--fz-fill);
+  border-right: 1px solid #2c5a97; border-left: 1px solid #2c5a97; box-shadow: inset 0 1px 0 rgba(255,255,255,.5);
+  animation: pulse 1.6s ease-in-out infinite alternate;
+}
+.pbar.lg { width: 100%; height: 18px; }
+@keyframes pulse { from { left: 0; } to { left: 66%; } }
+.spin { animation: spin 1s linear infinite; transform-origin: 50% 50%; }
+@keyframes spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .pbar::after { animation: none; left: 33%; } .spin { animation: none; } }
+
+/* ---------- job header + properties ---------- */
+.hero { display: flex; gap: 12px; align-items: flex-start; margin: 2px 0 12px; }
+.hero h1 { font-family: var(--fz-mono); font-size: 16px; line-height: 1.3; overflow-wrap: anywhere; }
+.hero .sub { color: var(--fz-muted); margin-top: 2px; }
+.hero .sub b { color: var(--fz-text); }
+.props {
+  display: grid; grid-template-columns: repeat(3, max-content minmax(0,1fr));
+  gap: 5px 14px; margin: 0; padding: 9px 12px; border: 1px solid #c3c0bc; border-radius: 4px;
+  box-shadow: inset 0 1px 0 #fff, 0 1px 0 #fff; background: rgba(255,255,255,.35);
+}
+.props dt { color: var(--fz-muted); }
+.props dt::after { content: ":"; }
+.props dd { margin: 0; min-width: 0; }
+.props .sha { font-family: var(--fz-mono); font-size: 12px; overflow-wrap: anywhere; }
+.props .pending { color: var(--fz-muted); font-style: italic; }
+.running-box { margin-top: 12px; padding: 10px 12px; border: 1px solid #c3c0bc; border-radius: 4px; background: rgba(255,255,255,.35); box-shadow: inset 0 1px 0 #fff; }
+.running-box .row { display: flex; align-items: center; gap: 10px; }
+.running-box .row .pbar { flex: 1; width: auto; }
+.running-box p { margin: 6px 0 0; color: var(--fz-muted); }
+
+/* ---------- transcript (sunken GtkTextView, gedit-ish) ---------- */
+.textview {
+  border: 1px solid var(--fz-edge); border-top-color: #77736d; background: var(--fz-base);
+  max-height: min(50vh, 400px); overflow: auto; overscroll-behavior: contain;
+  display: flex; flex-direction: column-reverse;   /* opens scrolled to the END, no JS */
+}
+.textview pre { margin: 0; padding: 4px 0; font: 12px/1.5 var(--fz-mono); white-space: pre-wrap; overflow-wrap: anywhere; counter-reset: line var(--first, 0); }
+.textview .l { display: grid; grid-template-columns: 6ch 1fr; column-gap: 8px; padding-right: 8px; }
+.textview .l::before { counter-increment: line; content: counter(line); text-align: right; color: #6e706b; background: #f4f3f2; border-right: 1px solid #e0dfdd; padding-right: 6px; user-select: none; }
+.textview .l.cmd { color: #204a87; }
+.textview .l.err { color: #a40000; font-weight: bold; }
+.textview .l.err::before { color: #a40000; background: #fbe3e3; }
+.textview .gap { display: block; padding: 3px 8px 5px calc(6ch + 16px); color: var(--fz-muted); font-style: italic; border-bottom: 1px dashed #d3d0cc; margin-bottom: 3px; font-family: var(--fz-font); font-size: 12px; }
+.textview.empty { height: auto; min-height: 96px; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; padding: 18px; color: var(--fz-muted); gap: 4px; }
+.textview.empty p { margin: 0; max-width: 60ch; }
+.textview.empty .ic-xl { opacity: .9; }
+
+/* ---------- message dialog (error pages) ---------- */
+.dialog { max-width: 540px; margin: 40px auto; background: var(--fz-bg); border: 1px solid #6a6660; border-radius: 4px; box-shadow: inset 1px 1px 0 #fff, 2px 3px 8px rgba(0,0,0,.18); }
+.dialog .dt { background: var(--fz-title); color: #fff; font-weight: bold; text-align: center; padding: 4px; border-radius: 3px 3px 0 0; text-shadow: 0 1px 0 rgba(0,0,0,.35); }
+.dialog .db { display: flex; gap: 14px; padding: 16px 16px 8px; }
+.dialog h1 { font-size: 15px; }
+.dialog p { margin: 6px 0 0; }
+.dialog .code { color: var(--fz-muted); font-size: var(--fz-size-sm); }
+.dialog .da { display: flex; justify-content: flex-end; gap: 8px; padding: 10px 16px 14px; }
+
+/* ---------- statusbar (GtkStatusbar) ---------- */
+.statusbar {
+  flex: none; display: flex; align-items: stretch; font-size: var(--fz-size-sm); color: var(--fz-text);
+  background: var(--fz-bg); border-top: 1px solid #c3c1be; box-shadow: inset 0 1px 0 #fff; min-height: 24px;
+}
+.statusbar > span { display: flex; align-items: center; gap: 5px; padding: 2px 10px; border-right: 1px solid var(--fz-etch-dark); box-shadow: 1px 0 0 #fff; white-space: nowrap; }
+.statusbar > span.grow { flex: 1; }
+.statusbar > span:last-child { border-right: 0; box-shadow: none; }
+.statusbar .ic { width: 14px; height: 14px; }
+
+/* ---------- empty state in a treeview ---------- */
+.tv-empty { padding: 22px 16px; text-align: center; color: var(--fz-muted); }
+.tv-empty p { margin: 4px 0 0; }
+.tv-empty strong { color: var(--fz-text); }
+
+@media (max-width: 1100px) { .props { grid-template-columns: max-content minmax(0,1fr) max-content minmax(0,1fr); } }
+/* ---------- narrow (≤ 640px) ---------- */
+@media (max-width: 640px) {
+  body { font-size: 14px; }
+  .titlebar { height: 24px; font-size: 12px; }
+  .toolbar { padding: 2px 4px; }
+  .tb { padding: 0 7px; height: 34px; }
+  .tb .lbl-long, .tb-note { display: none; }
+  .content { padding: 10px 8px 14px; }
+  .tv thead { display: none; }
+  .tv .c-hide { display: none; }
+  .tv td, .tv tbody th { height: auto; padding: 6px 6px; }
+  .tv .stc { width: 24px; padding-right: 0; vertical-align: top; padding-top: 8px; }
+  .tv .stc .w { display: none; }      /* the word moves into .sub */
+  .tv .entry a { font-size: 13px; }
+  .tv .entry, .tv .name { overflow-wrap: anywhere; }
+  .tv .sub { display: block; color: var(--fz-muted); font-size: 12px; margin-top: 2px; font-family: var(--fz-font); }
+  .tv .sub .sw { color: var(--fz-text); }
+  .tv .sub .sw.bad { color: #a40000; font-weight: bold; }
+  .tv tbody + tbody > tr:first-child > * { border-top-color: #cfccc8; }
+  .props { grid-template-columns: max-content minmax(0,1fr); padding: 8px 10px; }
+  .hero h1 { font-size: 15px; }
+  .infobar { flex-wrap: wrap; padding: 7px 8px; }
+  .infobar .acts { width: 100%; justify-content: flex-start; padding-left: 34px; }
+  .statusbar { flex-wrap: wrap; }
+  .statusbar > span.opt { display: none; }
+  .textview { max-height: 60vh; }
+  .btn-path code { display: none; }
+  .section-head { flex-wrap: wrap; }
+  .textview .l { grid-template-columns: 4.5ch 1fr; }
+  .textview .gap { padding-left: calc(4.5ch + 14px); }
+  .dialog { margin: 16px 0; }
+}
+</style>
+</head>
+<body>
+
+<svg xmlns="http://www.w3.org/2000/svg" width="0" height="0" style="position:absolute;width:0;height:0;overflow:hidden" aria-hidden="true" focusable="false">
+ <defs>
+  <linearGradient id="g-blue" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#9ec4ea"/><stop offset="1" stop-color="#3465a4"/></linearGradient>
+  <linearGradient id="g-ice" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#ffffff"/><stop offset=".55" stop-color="#cfe2f6"/><stop offset="1" stop-color="#8db6e4"/></linearGradient>
+  <linearGradient id="g-red" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ef2929"/><stop offset="1" stop-color="#a40000"/></linearGradient>
+  <linearGradient id="g-green" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#8ae234"/><stop offset="1" stop-color="#4e9a06"/></linearGradient>
+  <linearGradient id="g-orange" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fcaf3e"/><stop offset="1" stop-color="#ce5c00"/></linearGradient>
+  <linearGradient id="g-grey" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#888a85"/><stop offset="1" stop-color="#2e3436"/></linearGradient>
+  <linearGradient id="g-box" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#e9b96e"/><stop offset="1" stop-color="#c17d11"/></linearGradient>
+  <linearGradient id="g-page" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ffffff"/><stop offset="1" stop-color="#e4e4e0"/></linearGradient>
+ </defs>
+ <symbol id="i-app" viewBox="0 0 16 16"><rect x="1.5" y="1.5" width="13" height="13" rx="3" fill="url(#g-ice)" stroke="#3465a4"/><path d="M4 4.5h5" stroke="#fff" stroke-width="1.5" stroke-linecap="round"/><path d="M8 4.2v7.6M4.7 6.1l6.6 3.8M4.7 9.9l6.6-3.8" stroke="#204a87" stroke-width="1.1" stroke-linecap="round"/></symbol>
+ <symbol id="i-reload" viewBox="0 0 16 16"><path d="M12.6 6.2A5 5 0 1 0 13 9.6" fill="none" stroke="#204a87" stroke-width="3.2" stroke-linecap="round"/><path d="M12.6 6.2A5 5 0 1 0 13 9.6" fill="none" stroke="url(#g-blue)" stroke-width="1.8" stroke-linecap="round"/><path d="M14.6 2.4v5.1H9.5z" fill="#3465a4" stroke="#204a87" stroke-width=".8" stroke-linejoin="round"/></symbol>
+ <symbol id="i-back" viewBox="0 0 16 16"><path d="M1.5 8 7.5 2.5V5.5H14.5V10.5H7.5V13.5Z" fill="url(#g-blue)" stroke="#204a87" stroke-linejoin="round"/><path d="M3.2 8 6.6 4.9" stroke="#fff" stroke-opacity=".6"/></symbol>
+ <symbol id="i-stop" viewBox="0 0 16 16"><rect x="2.5" y="2.5" width="11" height="11" rx="1.5" fill="url(#g-grey)" stroke="#2e3436"/><path d="M4 4h8" stroke="#fff" stroke-opacity=".45"/></symbol>
+ <symbol id="i-play" viewBox="0 0 16 16"><path d="M3.5 2.2v11.6L13.6 8z" fill="url(#g-green)" stroke="#2e6a04" stroke-linejoin="round"/><path d="M4.6 4.2v3.3l3.6-2.1z" fill="#fff" fill-opacity=".4"/></symbol>
+ <symbol id="i-text" viewBox="0 0 16 16"><path d="M2.5 1.5h7.5l3.5 3.5v9.5h-11z" fill="url(#g-page)" stroke="#888a85"/><path d="M10 1.5v3.5h3.5" fill="#d3d7cf" stroke="#888a85" stroke-linejoin="round"/><path d="M4.5 7h7M4.5 9h7M4.5 11h5" stroke="#555753" stroke-width=".9"/></symbol>
+ <symbol id="i-end" viewBox="0 0 16 16"><path d="M8 13 2.8 7.2H5.8V2.5h4.4v4.7h3z" fill="url(#g-blue)" stroke="#204a87" stroke-linejoin="round"/><path d="M2.5 14.5h11" stroke="#204a87" stroke-width="1.6"/></symbol>
+ <symbol id="i-pkg" viewBox="0 0 16 16"><path d="M1.5 5 8 2l6.5 3v7L8 15l-6.5-3z" fill="url(#g-box)" stroke="#8f5902" stroke-linejoin="round"/><path d="M1.5 5 8 8l6.5-3M8 8v7" fill="none" stroke="#8f5902"/><path d="M4.8 3.5l6.5 3" stroke="#fce94f" stroke-opacity=".7"/></symbol>
+ <symbol id="i-ok" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6.5" fill="url(#g-green)" stroke="#3b7504"/><path d="M4.8 8.3 7 10.4l4.2-4.6" fill="none" stroke="#fff" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+ <symbol id="i-fail" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6.5" fill="url(#g-red)" stroke="#820000"/><path d="M5.6 5.6l4.8 4.8M10.4 5.6l-4.8 4.8" stroke="#fff" stroke-width="1.9" stroke-linecap="round"/></symbol>
+ <symbol id="i-stopped" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6.5" fill="#eeeeec" stroke="#555753"/><rect x="5.3" y="5.3" width="5.4" height="5.4" rx=".6" fill="#555753"/></symbol>
+ <symbol id="i-int" viewBox="0 0 16 16"><path d="M8 1.6 15 14H1z" fill="url(#g-orange)" stroke="#8f3b00" stroke-linejoin="round"/><path d="M8 5.6v4.3" stroke="#fff" stroke-width="1.8" stroke-linecap="round"/><circle cx="8" cy="11.9" r="1" fill="#fff"/></symbol>
+ <symbol id="i-none" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6" fill="#fff" stroke="#8f5902" stroke-width="1.4" stroke-dasharray="2.4 1.6"/><path d="M4.6 11.4l6.8-6.8" stroke="#8f5902" stroke-width="1.5" stroke-linecap="round"/></symbol>
+ <symbol id="i-hit" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6.5" fill="url(#g-green)" stroke="#3b7504"/><path d="M4.8 8.3 7 10.4l4.2-4.6" fill="none" stroke="#fff" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/><circle cx="12.6" cy="3.6" r="2.6" fill="url(#g-ice)" stroke="#3465a4" stroke-width=".9"/></symbol>
+ <symbol id="i-run" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6" fill="none" stroke="#d3d7cf" stroke-width="2.4"/><path class="spin" d="M8 2a6 6 0 0 1 6 6" fill="none" stroke="#3465a4" stroke-width="2.4" stroke-linecap="round"/></symbol>
+ <symbol id="i-info" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" fill="url(#g-blue)" stroke="#204a87"/><circle cx="12" cy="7.2" r="1.6" fill="#fff"/><path d="M12 10.5v7" stroke="#fff" stroke-width="2.6" stroke-linecap="round"/></symbol>
+ <symbol id="i-warn" viewBox="0 0 24 24"><path d="M12 2.5 22.5 21h-21z" fill="url(#g-orange)" stroke="#8f3b00" stroke-linejoin="round"/><path d="M12 8.5v6.5" stroke="#fff" stroke-width="2.6" stroke-linecap="round"/><circle cx="12" cy="18" r="1.4" fill="#fff"/></symbol>
+ <symbol id="i-err" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" fill="url(#g-red)" stroke="#820000"/><path d="M8.2 8.2l7.6 7.6M15.8 8.2l-7.6 7.6" stroke="#fff" stroke-width="2.8" stroke-linecap="round"/></symbol>
+ <symbol id="i-question" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" fill="#eeeeec" stroke="#555753"/><rect x="8" y="8" width="8" height="8" rx="1" fill="#555753"/></symbol>
+ <symbol id="i-clock" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6.5" fill="#fff" stroke="#555753"/><path d="M8 4v4l2.6 1.6" fill="none" stroke="#2e3436" stroke-width="1.3" stroke-linecap="round"/></symbol>
+</svg>
+
+<nav class="proto" aria-label="Prototype screens (mock only)"><b>Mock only ·</b>
+<a href="#index">Index</a><a href="#job-running">Running</a><a href="#job-failed">Failed</a><a href="#job-stopped">Stopped</a>
+<a href="#job-interrupted">Interrupted</a><a href="#job-nothing">Matched nothing</a><a href="#job-hit">Cache hit</a>
+<a href="#job-truncated">Truncated transcript</a><a href="#empty">Empty</a><a href="#e404">404</a><a href="#e409">409</a>
+<span>· resize below 640px for the mobile layout</span></nav>
+
+<section class="screen" id="index" aria-label="mock screen: Jobs — freezer">
+  <a id="shot-index" class="vh" tabindex="-1">screenshot anchor</a>
+  <a class="skip" href="#main-index">Skip to content</a>
+  <header class="titlebar"><svg class="ic" aria-hidden="true"><use href="#i-app"/></svg><span>Jobs — freezer</span></header>
+  <div class="toolbar"><a class="tb " href="#index"><svg class="ic" aria-hidden="true"><use href="#i-reload"/></svg><span class="lbl">Reload</span></a><span class="tb-sep" aria-hidden="true"></span><a class="tb " href="#index" aria-pressed="true"><svg class="ic" aria-hidden="true"><use href="#i-clock"/></svg><span class="lbl">Auto-refresh<span class="lbl-long"> (15 s)</span></span></a><span class="tb-spring"></span><span class="tb-note">1 job running</span></div>
+  
+  <div class="infobar info" role="status"><svg class="ic ic-lg" aria-hidden="true"><use href="#i-info"/></svg><div class="msg"><p class="primary">Build requested for acme-cli.</p><p>Its job appears in this list once the checkout finishes, usually within a few seconds.</p></div><div class="acts"><a class="btn btn-sm" href="#index">Reload</a><a class="btn btn-sm" href="#index">Dismiss</a></div></div>
+  <main class="content" id="main-index" tabindex="-1">
+<div class="section">
+  <h1 class="vh">Jobs</h1>
+  <div class="section-head"><h2>Repositories</h2><span class="aside">3 registered</span></div>
+  <div class="tv"><table>
+<thead><tr><th scope="col">Repository</th><th scope="col" class="c-hide">Forge</th><th scope="col" class="c-hide">Last built</th><th scope="col" class="c-hide">Latest job</th><th scope="col"><span class="vh">Action</span></th></tr></thead>
+<tbody><tr id="repo-acme-web">
+  <th scope="row" class="name"><span class="st" style="font-weight:bold"><svg class="ic" aria-hidden="true"><use href="#i-pkg"/></svg>acme-web</span><span class="sub">last built <code>4e8d1b07</code> · 10-08 20:17</span></th>
+  <td class="c-hide"><code>example/acme-web</code></td>
+  <td class="c-hide"><code>4e8d1b07</code> · <span class="when">2026-10-08 20:17</span></td>
+  <td class="c-hide"><a class="st" href="#job-running" style="text-decoration:none;color:inherit"><span class="st st-running"><svg class="ic" aria-hidden="true"><use href="#i-run"/></svg><span class="w">running</span></span><span class="id">#8</span></a></td>
+  <td class="act"><form method="post" action="/build/acme-web"><button class="btn btn-sm" type="submit" aria-describedby="build-now-help"><svg class="ic" aria-hidden="true"><use href="#i-play"/></svg>Build now</button></form></td>
+</tr><tr id="repo-acme-cli">
+  <th scope="row" class="name"><span class="st" style="font-weight:bold"><svg class="ic" aria-hidden="true"><use href="#i-pkg"/></svg>acme-cli</span><span class="sub">last built <code>7b1e5d3c</code> · 10-07 19:41</span></th>
+  <td class="c-hide"><code>example/acme-cli</code></td>
+  <td class="c-hide"><code>7b1e5d3c</code> · <span class="when">2026-10-07 19:41</span></td>
+  <td class="c-hide"><a class="st" href="#job-hit" style="text-decoration:none;color:inherit"><span class="st st-hit"><svg class="ic" aria-hidden="true"><use href="#i-hit"/></svg><span class="w">succeeded</span></span><span class="id">#4</span></a></td>
+  <td class="act"><form method="post" action="/build/acme-cli"><button class="btn btn-sm" type="submit" aria-describedby="build-now-help"><svg class="ic" aria-hidden="true"><use href="#i-play"/></svg>Build now</button></form></td>
+</tr><tr id="repo-never-built">
+  <th scope="row" class="name"><span class="st" style="font-weight:bold"><svg class="ic" aria-hidden="true"><use href="#i-pkg"/></svg>never-built</span><span class="sub">never built</span></th>
+  <td class="c-hide"><code>example/never-built</code></td>
+  <td class="c-hide"><span class="never">never built</span></td>
+  <td class="c-hide"><span class="never">no jobs</span></td>
+  <td class="act"><form method="post" action="/build/never-built"><button class="btn btn-sm" type="submit" aria-describedby="build-now-help"><svg class="ic" aria-hidden="true"><use href="#i-play"/></svg>Build now</button></form></td>
+</tr></tbody></table></div>
+<p class="hint" id="build-now-help">Build now rebuilds the head of the default branch and republishes it, even if that commit was built before.</p>
+</div>
+<div class="section">
+  <div class="section-head"><h2>Recent jobs</h2><span class="aside">newest first · grouped by commit</span></div>
+  <div class="tv"><table>
+<thead><tr><th scope="col" class="c-hide">Repository · commit</th><th scope="col">Status</th><th scope="col">Entry</th><th scope="col" class="c-hide">Job</th><th scope="col" class="c-hide">Started</th><th scope="col" class="c-hide">Duration</th><th scope="col" class="c-hide">Result</th><th scope="col"><span class="vh">Action</span></th></tr></thead>
+<tbody><tr data-job="8" data-repo="acme-web" data-commit="9f3c2a71d0b84e6f5a2c19d7e3b0486f1c2d5e9a" data-status="running" data-cache="miss"><th scope="rowgroup" rowspan="1" class="grp c-hide"><span class="repo"><svg class="ic" aria-hidden="true"><use href="#i-pkg"/></svg>acme-web <code class="sha" title="9f3c2a71d0b84e6f5a2c19d7e3b0486f1c2d5e9a">9f3c2a71</code></span></th><td class="stc"><span class="st st-running"><svg class="ic" aria-hidden="true"><use href="#i-run"/></svg><span class="w">running</span></span></td><td class="entry"><a href="#job-running">packages.x86_64-linux.web</a><span class="sub"><span class="sw">running</span> · acme-web <code>9f3c2a71</code> · 10-08 21:40 · 6m 37s so far</span></td><td class="c-hide id">#8</td><td class="c-hide when"><time datetime="2026-10-08T21:40:28+08:00">2026-10-08 21:40</time></td><td class="c-hide num"><span class="pbar" aria-hidden="true"></span> 6m 37s<span class="vh"> so far</span></td><td class="c-hide res">building…</td><td class="act"><form method="post" action="/jobs/8/stop"><button class="btn btn-sm" type="submit"><svg class="ic" aria-hidden="true"><use href="#i-stop"/></svg>Stop</button></form></td></tr></tbody><tbody><tr data-job="7" data-repo="acme-web" data-commit="4e8d1b07c3a2f95e6d0b7c18a4f3e2d1905b6c7a" data-status="succeeded" data-cache="miss"><th scope="rowgroup" rowspan="1" class="grp c-hide"><span class="repo"><svg class="ic" aria-hidden="true"><use href="#i-pkg"/></svg>acme-web <code class="sha" title="4e8d1b07c3a2f95e6d0b7c18a4f3e2d1905b6c7a">4e8d1b07</code></span></th><td class="stc"><span class="st st-succeeded"><svg class="ic" aria-hidden="true"><use href="#i-ok"/></svg><span class="w">succeeded</span></span></td><td class="entry"><a href="#job-truncated">packages.x86_64-linux.docs</a><span class="sub"><span class="sw">succeeded</span> · acme-web <code>4e8d1b07</code> · 10-08 20:11 · 6m 42s</span></td><td class="c-hide id">#7</td><td class="c-hide when"><time datetime="2026-10-08T20:11:00+08:00">2026-10-08 20:11</time></td><td class="c-hide num">6m 42s</td><td class="c-hide res">published 1 path</td><td class="act"></td></tr></tbody><tbody><tr data-job="6" data-repo="acme-web" data-commit="2c7f0e94b1d3a8c56e2f7d0b9a4c1e3f58d7b260" data-status="succeeded" data-cache="miss"><th scope="rowgroup" rowspan="2" class="grp c-hide"><span class="repo"><svg class="ic" aria-hidden="true"><use href="#i-pkg"/></svg>acme-web <code class="sha" title="2c7f0e94b1d3a8c56e2f7d0b9a4c1e3f58d7b260">2c7f0e94</code></span></th><td class="stc"><span class="st st-succeeded"><svg class="ic" aria-hidden="true"><use href="#i-ok"/></svg><span class="w">succeeded</span></span></td><td class="entry"><a href="#job-truncated">packages.x86_64-linux.web</a><span class="sub"><span class="sw">succeeded</span> · acme-web <code>2c7f0e94</code> · 10-08 18:41 · 2m 05s</span></td><td class="c-hide id">#6</td><td class="c-hide when"><time datetime="2026-10-08T18:41:10+08:00">2026-10-08 18:41</time></td><td class="c-hide num">2m 05s</td><td class="c-hide res">published 1 path</td><td class="act"></td></tr><tr data-job="5" data-repo="acme-web" data-commit="2c7f0e94b1d3a8c56e2f7d0b9a4c1e3f58d7b260" data-status="succeeded" data-cache="miss"><td class="stc"><span class="st st-nothing"><svg class="ic" aria-hidden="true"><use href="#i-none"/></svg><span class="w">matched nothing</span></span></td><td class="entry"><a href="#job-nothing">checks.x86_64-linux.*</a><span class="sub"><span class="sw">matched nothing</span> · acme-web <code>2c7f0e94</code> · 10-08 18:41 · 2s</span></td><td class="c-hide id">#5</td><td class="c-hide when"><time datetime="2026-10-08T18:41:10+08:00">2026-10-08 18:41</time></td><td class="c-hide num">2s</td><td class="c-hide res">nothing verified or published</td><td class="act"></td></tr></tbody><tbody><tr data-job="4" data-repo="acme-cli" data-commit="7b1e5d3c90af4e21b6c8d2f7a3e05b9c1d4f6a82" data-status="succeeded" data-cache="hit"><th scope="rowgroup" rowspan="1" class="grp c-hide"><span class="repo"><svg class="ic" aria-hidden="true"><use href="#i-pkg"/></svg>acme-cli <code class="sha" title="7b1e5d3c90af4e21b6c8d2f7a3e05b9c1d4f6a82">7b1e5d3c</code></span></th><td class="stc"><span class="st st-hit"><svg class="ic" aria-hidden="true"><use href="#i-hit"/></svg><span class="w">succeeded</span></span></td><td class="entry"><a href="#job-hit">packages.x86_64-linux.cli</a><span class="sub"><span class="sw">succeeded</span> · acme-cli <code>7b1e5d3c</code> · 10-07 19:41 · 80ms</span></td><td class="c-hide id">#4</td><td class="c-hide when"><time datetime="2026-10-07T19:41:02+08:00">2026-10-07 19:41</time></td><td class="c-hide num">80ms</td><td class="c-hide res">cached — nothing built</td><td class="act"></td></tr></tbody><tbody><tr data-job="3" data-repo="acme-cli" data-commit="e05a9c4b72d1f38e6a0b5c29d7f4e81a3b6c0d95" data-status="failed" data-cache="miss"><th scope="rowgroup" rowspan="1" class="grp c-hide"><span class="repo"><svg class="ic" aria-hidden="true"><use href="#i-pkg"/></svg>acme-cli <code class="sha" title="e05a9c4b72d1f38e6a0b5c29d7f4e81a3b6c0d95">e05a9c4b</code></span></th><td class="stc"><span class="st st-failed"><svg class="ic" aria-hidden="true"><use href="#i-fail"/></svg><span class="w">failed</span></span></td><td class="entry"><a href="#job-failed">packages.x86_64-linux.broken</a><span class="sub"><span class="sw bad">failed</span> · acme-cli <code>e05a9c4b</code> · 10-06 19:41 · 1m 30s</span></td><td class="c-hide id">#3</td><td class="c-hide when"><time datetime="2026-10-06T19:41:40+08:00">2026-10-06 19:41</time></td><td class="c-hide num">1m 30s</td><td class="c-hide res bad">exit status 1</td><td class="act"></td></tr></tbody><tbody><tr data-job="2" data-repo="acme-web" data-commit="5d2b8f0e1c7a39d4b6e2f08a5c3d71e9b4a06f2c" data-status="stopped" data-cache="miss"><th scope="rowgroup" rowspan="1" class="grp c-hide"><span class="repo"><svg class="ic" aria-hidden="true"><use href="#i-pkg"/></svg>acme-web <code class="sha" title="5d2b8f0e1c7a39d4b6e2f08a5c3d71e9b4a06f2c">5d2b8f0e</code></span></th><td class="stc"><span class="st st-stopped"><svg class="ic" aria-hidden="true"><use href="#i-stopped"/></svg><span class="w">stopped</span></span></td><td class="entry"><a href="#job-stopped">packages.x86_64-linux.slow</a><span class="sub"><span class="sw">stopped</span> · acme-web <code>5d2b8f0e</code> · 10-05 21:41 · 47s</span></td><td class="c-hide id">#2</td><td class="c-hide when"><time datetime="2026-10-05T21:41:13+08:00">2026-10-05 21:41</time></td><td class="c-hide num">47s</td><td class="c-hide res">stopped by the operator</td><td class="act"></td></tr></tbody><tbody><tr data-job="1" data-repo="acme-cli" data-commit="81c4f7a2e9d03b56c1a8e4f0d72b9c35e6a1f0d4" data-status="interrupted" data-cache="miss"><th scope="rowgroup" rowspan="1" class="grp c-hide"><span class="repo"><svg class="ic" aria-hidden="true"><use href="#i-pkg"/></svg>acme-cli <code class="sha" title="81c4f7a2e9d03b56c1a8e4f0d72b9c35e6a1f0d4">81c4f7a2</code></span></th><td class="stc"><span class="st st-interrupted"><svg class="ic" aria-hidden="true"><use href="#i-int"/></svg><span class="w">interrupted</span></span></td><td class="entry"><a href="#job-interrupted">packages.x86_64-linux.cli</a><span class="sub"><span class="sw">interrupted</span> · acme-cli <code>81c4f7a2</code> · 10-03 21:41 · —</span></td><td class="c-hide id">#1</td><td class="c-hide when"><time datetime="2026-10-03T21:41:55+08:00">2026-10-03 21:41</time></td><td class="c-hide num">—</td><td class="c-hide res">freezer restarted mid-build</td><td class="act"></td></tr></tbody></table></div>
+</div></main>
+  <footer class="statusbar"><span class="grow">8 jobs · 1 running · 3 repositories</span><span class="opt"><svg class="ic" aria-hidden="true"><use href="#i-clock"/></svg>Reloads every 15 s while a job runs</span><span>Updated 21:47:05 +08:00</span></footer>
+</section>
+<section class="screen" id="job-running" aria-label="mock screen: Job #8: packages.x86_64-linux.web — freezer">
+  <a id="shot-job-running" class="vh" tabindex="-1">screenshot anchor</a>
+  <a class="skip" href="#main-job-running">Skip to content</a>
+  <header class="titlebar"><svg class="ic" aria-hidden="true"><use href="#i-app"/></svg><span>Job #8: packages.x86_64-linux.web — freezer</span></header>
+  <div class="toolbar"><a class="tb " href="#index"><svg class="ic" aria-hidden="true"><use href="#i-back"/></svg><span class="lbl">Jobs</span></a><a class="tb " href="#job-running"><svg class="ic" aria-hidden="true"><use href="#i-reload"/></svg><span class="lbl">Reload</span></a><span class="tb-sep" aria-hidden="true"></span><form method="post" action="/jobs/8/stop"><button type="submit" class="tb danger"><svg class="ic" aria-hidden="true"><use href="#i-stop"/></svg><span class="lbl">Stop<span class="lbl-long"> build</span></span></button></form></div>
+  <nav class="pathbar" aria-label="Location"><a class="btn btn-path" href="#index"><svg class="ic" aria-hidden="true"><use href="#i-app"/></svg><span>freezer</span></a><a class="btn btn-path" href="#index"><svg class="ic" aria-hidden="true"><use href="#i-pkg"/></svg><span>acme-web</span></a><a class="btn btn-path" aria-current="page" href="#job-running"><span>#8 <code>packages.x86_64-linux.web</code></span></a></nav>
+  
+  <main class="content" id="main-job-running" tabindex="-1"><div class="hero"><svg class="ic ic-xl" aria-hidden="true"><use href="#i-run"/></svg><div><h1>packages.x86_64-linux.web</h1><div class="sub"><b>running</b> for 6m 37s · started 21:40:28 · acme-web @ <code>9f3c2a71</code></div></div></div>
+<div class="section"><dl class="props">
+  <dt>Repository</dt><dd><a href="#index">acme-web</a> <span style="color:var(--fz-muted)">(example/acme-web)</span></dd>
+  <dt>Started</dt><dd><time datetime="2026-10-08T21:40:28+08:00">2026-10-08 21:40:28 +08:00</time></dd>
+  <dt>Duration</dt><dd>6m 37s so far</dd>
+  <dt>Commit</dt><dd class="sha">9f3c2a71d0b84e6f5a2c19d7e3b0486f1c2d5e9a</dd>
+  <dt>Finished</dt><dd><span class="pending">still running</span></dd>
+  <dt>Cache</dt><dd><span class="pending">decided when the job finishes</span></dd>
+  <dt>Published</dt><dd><span class="pending">—</span></dd>
+</dl></div>
+<div class="section"><div class="section-head"><h2>Progress</h2></div>
+<div class="running-box" role="status">
+  <div class="row"><span class="pbar lg" aria-hidden="true"></span><span class="num" style="white-space:nowrap"><b>6m 37s</b> so far</span></div>
+  <p>The transcript is recorded when the job finishes. Stop ends the whole build event: entries not yet started are skipped.</p>
+</div></div></main>
+  <footer class="statusbar"><span class="grow"><span class="st st-running"><svg class="ic" aria-hidden="true"><use href="#i-run"/></svg><span class="w">running</span></span> · Job #8 · acme-web · <code>9f3c2a71</code></span><span class="opt"><svg class="ic" aria-hidden="true"><use href="#i-clock"/></svg>Reloads every 10 s · <a href="#job-running">Pause</a></span><span class="opt">Updated 21:47:05 +08:00</span></footer>
+</section>
+<section class="screen" id="job-failed" aria-label="mock screen: Job #3: packages.x86_64-linux.broken — freezer">
+  <a id="shot-job-failed" class="vh" tabindex="-1">screenshot anchor</a>
+  <a class="skip" href="#main-job-failed">Skip to content</a>
+  <header class="titlebar"><svg class="ic" aria-hidden="true"><use href="#i-app"/></svg><span>Job #3: packages.x86_64-linux.broken — freezer</span></header>
+  <div class="toolbar"><a class="tb " href="#index"><svg class="ic" aria-hidden="true"><use href="#i-back"/></svg><span class="lbl">Jobs</span></a><a class="tb " href="#job-failed"><svg class="ic" aria-hidden="true"><use href="#i-reload"/></svg><span class="lbl">Reload</span></a></div>
+  <nav class="pathbar" aria-label="Location"><a class="btn btn-path" href="#index"><svg class="ic" aria-hidden="true"><use href="#i-app"/></svg><span>freezer</span></a><a class="btn btn-path" href="#index"><svg class="ic" aria-hidden="true"><use href="#i-pkg"/></svg><span>acme-cli</span></a><a class="btn btn-path" aria-current="page" href="#job-failed"><span>#3 <code>packages.x86_64-linux.broken</code></span></a></nav>
+  <div class="infobar error" role="alert"><svg class="ic ic-lg" aria-hidden="true"><use href="#i-err"/></svg><div class="msg"><p class="primary">The job did not succeed</p><p><code>exit status 1</code></p></div><div class="acts"><a class="btn btn-sm" href="#end-3"><svg class="ic" aria-hidden="true"><use href="#i-end"/></svg>Jump to the end of the transcript</a></div></div>
+  <main class="content" id="main-job-failed" tabindex="-1"><div class="hero"><svg class="ic ic-xl" aria-hidden="true"><use href="#i-fail"/></svg><div><h1>packages.x86_64-linux.broken</h1><div class="sub"><b>failed</b> after 1m 30s · 2026-10-06 19:41 · acme-cli @ <code>e05a9c4b</code></div></div></div>
+<div class="section"><dl class="props">
+  <dt>Repository</dt><dd><a href="#index">acme-cli</a> <span style="color:var(--fz-muted)">(example/acme-cli)</span></dd>
+  <dt>Started</dt><dd><time datetime="2026-10-06T19:41:40+08:00">2026-10-06 19:41:40 +08:00</time></dd>
+  <dt>Duration</dt><dd>1m 30s</dd>
+  <dt>Commit</dt><dd class="sha">e05a9c4b72d1f38e6a0b5c29d7f4e81a3b6c0d95</dd>
+  <dt>Finished</dt><dd>2026-10-06 19:43:10 +08:00</dd>
+  <dt>Cache</dt><dd>miss</dd>
+  <dt>Published</dt><dd>0 paths</dd>
+</dl></div>
+<div class="section"><div class="section-head"><h2>Transcript</h2><span class="aside">35 lines</span><span class="push"><a class="btn btn-sm" href="#"><svg class="ic" aria-hidden="true"><use href="#i-text"/></svg>Open as plain text</a></span></div><div class="textview" tabindex="0" role="region" aria-label="Transcript"><pre style="--first:0"><span class="l cmd">$ nix eval --raw .#packages.x86_64-linux.broken.outPath</span><span class="l ">/nix/store/0v1kq6m3r2b8yd5xw7c9f4n1h0s2j6la-broken-0.3.1</span><span class="l cmd">$ nix path-info --store &#x27;s3://freezer-cache?endpoint=https://cache.example.org&amp;region=auto&#x27; /nix/store/0v1kq6m3r2b8yd5xw7c9f4n1h0s2j6la-broken-0.3.1</span><span class="l ">error: path &#x27;/nix/store/0v1kq6m3r2b8yd5xw7c9f4n1h0s2j6la-broken-0.3.1&#x27; is not valid</span><span class="l ">probe: miss</span><span class="l cmd">$ nix copy --to &#x27;s3://freezer-cache?endpoint=https://cache.example.org&amp;region=auto&amp;compression=zstd&amp;multipart-upload=true&#x27; .#packages.x86_64-linux.broken</span><span class="l ">these 2 derivations will be built:</span><span class="l ">  /nix/store/7f2kd1x9q0m3s8w4c6v5b1n2h7j3l0pa-source.drv</span><span class="l ">  /nix/store/b3c9x1z7m5n0q2w8e4r6t1y3u5i7o9pa-broken-0.3.1.drv</span><span class="l ">building &#x27;/nix/store/7f2kd1x9q0m3s8w4c6v5b1n2h7j3l0pa-source.drv&#x27;...</span><span class="l ">building &#x27;/nix/store/b3c9x1z7m5n0q2w8e4r6t1y3u5i7o9pa-broken-0.3.1.drv&#x27;...</span><span class="l ">broken&gt; Running phase: unpackPhase</span><span class="l ">broken&gt; unpacking source archive /nix/store/k1x8c0v2b7n3m9q4w5e6r1t8y2u0i3op-source</span><span class="l ">broken&gt; source root is source</span><span class="l ">broken&gt; Running phase: patchPhase</span><span class="l ">broken&gt; Running phase: configurePhase</span><span class="l ">broken&gt; no configure script, doing nothing</span><span class="l ">broken&gt; Running phase: buildPhase</span><span class="l ">broken&gt; build flags: SHELL=/nix/store/q8w2e4r6t8y0u2i4o6p8a0s2d4f6g8h0-bash-5.2p37/bin/bash</span><span class="l ">broken&gt; cc -O2 -Wall -c src/main.c -o build/main.o</span><span class="l ">broken&gt; cc -O2 -Wall -c src/glob.c -o build/glob.o</span><span class="l ">broken&gt; cc -O2 -Wall -c src/parse.c -o build/parse.o</span><span class="l ">broken&gt; src/parse.c: In function &#x27;parse_entry&#x27;:</span><span class="l err">broken&gt; src/parse.c:88:17: error: &#x27;struct entry&#x27; has no member named &#x27;pattern&#x27;</span><span class="l ">broken&gt;    88 |     if (e-&gt;pattern == NULL)</span><span class="l ">broken&gt;       |          ^~</span><span class="l ">broken&gt; make: *** [Makefile:12: all] Error 1</span><span class="l err">error: builder for &#x27;/nix/store/b3c9x1z7m5n0q2w8e4r6t1y3u5i7o9pa-broken-0.3.1.drv&#x27; failed with exit code 2;</span><span class="l ">       last 4 log lines:</span><span class="l ">       &gt; src/parse.c:88:17: error: &#x27;struct entry&#x27; has no member named &#x27;pattern&#x27;</span><span class="l ">       &gt;    88 |     if (e-&gt;pattern == NULL)</span><span class="l ">       &gt;       |          ^~</span><span class="l ">       &gt; make: *** [Makefile:12: all] Error 1</span><span class="l ">       For full logs, run &#x27;nix log /nix/store/b3c9x1z7m5n0q2w8e4r6t1y3u5i7o9pa-broken-0.3.1.drv&#x27;.</span><span class="l err">error: 1 dependencies of derivation &#x27;/nix/store/b3c9x1z7m5n0q2w8e4r6t1y3u5i7o9pa-broken-0.3.1.drv&#x27; failed to build</span><span id="end-3"></span></pre></div></div></main>
+  <footer class="statusbar"><span class="grow"><span class="st st-failed"><svg class="ic" aria-hidden="true"><use href="#i-fail"/></svg><span class="w">failed</span></span> · Job #3 · acme-cli · <code>e05a9c4b</code></span><span class="opt">Updated 21:47:05 +08:00</span></footer>
+</section>
+<section class="screen" id="job-stopped" aria-label="mock screen: Job #2: packages.x86_64-linux.slow — freezer">
+  <a id="shot-job-stopped" class="vh" tabindex="-1">screenshot anchor</a>
+  <a class="skip" href="#main-job-stopped">Skip to content</a>
+  <header class="titlebar"><svg class="ic" aria-hidden="true"><use href="#i-app"/></svg><span>Job #2: packages.x86_64-linux.slow — freezer</span></header>
+  <div class="toolbar"><a class="tb " href="#index"><svg class="ic" aria-hidden="true"><use href="#i-back"/></svg><span class="lbl">Jobs</span></a><a class="tb " href="#job-stopped"><svg class="ic" aria-hidden="true"><use href="#i-reload"/></svg><span class="lbl">Reload</span></a></div>
+  <nav class="pathbar" aria-label="Location"><a class="btn btn-path" href="#index"><svg class="ic" aria-hidden="true"><use href="#i-app"/></svg><span>freezer</span></a><a class="btn btn-path" href="#index"><svg class="ic" aria-hidden="true"><use href="#i-pkg"/></svg><span>acme-web</span></a><a class="btn btn-path" aria-current="page" href="#job-stopped"><span>#2 <code>packages.x86_64-linux.slow</code></span></a></nav>
+  <div class="infobar question" role="status"><svg class="ic ic-lg" aria-hidden="true"><use href="#i-question"/></svg><div class="msg"><p class="primary">You stopped this build.</p><p>The running entry was cancelled and the rest of the build event was skipped. Nothing from this entry was published.</p></div><div class="acts"><form method="post" action="/build/acme-web" style="margin:0"><button class="btn btn-sm" type="submit"><svg class="ic" aria-hidden="true"><use href="#i-play"/></svg>Build acme-web now</button></form></div></div>
+  <main class="content" id="main-job-stopped" tabindex="-1"><div class="hero"><svg class="ic ic-xl" aria-hidden="true"><use href="#i-stopped"/></svg><div><h1>packages.x86_64-linux.slow</h1><div class="sub"><b>stopped</b> by you after 47s · 2026-10-05 21:41 · acme-web @ <code>5d2b8f0e</code></div></div></div>
+<div class="section"><dl class="props">
+  <dt>Repository</dt><dd><a href="#index">acme-web</a> <span style="color:var(--fz-muted)">(example/acme-web)</span></dd>
+  <dt>Started</dt><dd><time datetime="2026-10-05T21:41:13+08:00">2026-10-05 21:41:13 +08:00</time></dd>
+  <dt>Duration</dt><dd>47s</dd>
+  <dt>Commit</dt><dd class="sha">5d2b8f0e1c7a39d4b6e2f08a5c3d71e9b4a06f2c</dd>
+  <dt>Finished</dt><dd>2026-10-05 21:42:00 +08:00</dd>
+  <dt>Cache</dt><dd>miss</dd>
+  <dt>Published</dt><dd>0 paths</dd>
+</dl></div>
+<div class="section"><div class="section-head"><h2>Transcript</h2><span class="aside">5 lines</span><span class="push"><a class="btn btn-sm" href="#"><svg class="ic" aria-hidden="true"><use href="#i-text"/></svg>Open as plain text</a></span></div><div class="textview" tabindex="0" role="region" aria-label="Transcript"><pre style="--first:0"><span class="l cmd">$ nix copy --to &#x27;s3://freezer-cache?endpoint=https://cache.example.org&amp;region=auto&#x27; .#packages.x86_64-linux.slow</span><span class="l ">building &#x27;/nix/store/s1l2o3w4a5b6c7d8e9f0g1h2i3j4k5l6-slow-1.0.drv&#x27;...</span><span class="l ">slow&gt; Running phase: buildPhase</span><span class="l ">slow&gt; sleeping 600s to simulate a long build</span><span class="l ">stopped by the operator</span><span id="end-2"></span></pre></div></div></main>
+  <footer class="statusbar"><span class="grow"><span class="st st-stopped"><svg class="ic" aria-hidden="true"><use href="#i-stopped"/></svg><span class="w">stopped</span></span> · Job #2 · acme-web · <code>5d2b8f0e</code></span><span class="opt">Updated 21:47:05 +08:00</span></footer>
+</section>
+<section class="screen" id="job-interrupted" aria-label="mock screen: Job #1: packages.x86_64-linux.cli — freezer">
+  <a id="shot-job-interrupted" class="vh" tabindex="-1">screenshot anchor</a>
+  <a class="skip" href="#main-job-interrupted">Skip to content</a>
+  <header class="titlebar"><svg class="ic" aria-hidden="true"><use href="#i-app"/></svg><span>Job #1: packages.x86_64-linux.cli — freezer</span></header>
+  <div class="toolbar"><a class="tb " href="#index"><svg class="ic" aria-hidden="true"><use href="#i-back"/></svg><span class="lbl">Jobs</span></a><a class="tb " href="#job-interrupted"><svg class="ic" aria-hidden="true"><use href="#i-reload"/></svg><span class="lbl">Reload</span></a></div>
+  <nav class="pathbar" aria-label="Location"><a class="btn btn-path" href="#index"><svg class="ic" aria-hidden="true"><use href="#i-app"/></svg><span>freezer</span></a><a class="btn btn-path" href="#index"><svg class="ic" aria-hidden="true"><use href="#i-pkg"/></svg><span>acme-cli</span></a><a class="btn btn-path" aria-current="page" href="#job-interrupted"><span>#1 <code>packages.x86_64-linux.cli</code></span></a></nav>
+  <div class="infobar warning" role="status"><svg class="ic ic-lg" aria-hidden="true"><use href="#i-warn"/></svg><div class="msg"><p class="primary">freezer restarted while this job was running.</p><p>The build never finished, so this commit is not recorded as built. A new push or Build now runs it again.</p></div><div class="acts"><form method="post" action="/build/acme-cli" style="margin:0"><button class="btn btn-sm" type="submit"><svg class="ic" aria-hidden="true"><use href="#i-play"/></svg>Build acme-cli now</button></form></div></div>
+  <main class="content" id="main-job-interrupted" tabindex="-1"><div class="hero"><svg class="ic ic-xl" aria-hidden="true"><use href="#i-int"/></svg><div><h1>packages.x86_64-linux.cli</h1><div class="sub"><b>interrupted</b> · started 2026-10-03 21:41 · acme-cli @ <code>81c4f7a2</code></div></div></div>
+<div class="section"><dl class="props">
+  <dt>Repository</dt><dd><a href="#index">acme-cli</a> <span style="color:var(--fz-muted)">(example/acme-cli)</span></dd>
+  <dt>Started</dt><dd><time datetime="2026-10-03T21:41:55+08:00">2026-10-03 21:41:55 +08:00</time></dd>
+  <dt>Duration</dt><dd><span class="pending">unknown</span></dd>
+  <dt>Commit</dt><dd class="sha">81c4f7a2e9d03b56c1a8e4f0d72b9c35e6a1f0d4</dd>
+  <dt>Finished</dt><dd><span class="pending">never — freezer restarted</span></dd>
+  <dt>Cache</dt><dd>miss</dd>
+  <dt>Published</dt><dd>0 paths</dd>
+</dl></div>
+<div class="section"><div class="section-head"><h2>Transcript</h2><span class="aside">none recorded</span><span class="push"></span></div><div class="textview empty"><svg class="ic ic-xl" aria-hidden="true"><use href="#i-int"/></svg><p><b>No transcript.</b></p><p>Transcripts are saved when a job finishes, and this one never did.</p></div></div></main>
+  <footer class="statusbar"><span class="grow"><span class="st st-interrupted"><svg class="ic" aria-hidden="true"><use href="#i-int"/></svg><span class="w">interrupted</span></span> · Job #1 · acme-cli · <code>81c4f7a2</code></span><span class="opt">Updated 21:47:05 +08:00</span></footer>
+</section>
+<section class="screen" id="job-nothing" aria-label="mock screen: Job #5: checks.x86_64-linux.* — freezer">
+  <a id="shot-job-nothing" class="vh" tabindex="-1">screenshot anchor</a>
+  <a class="skip" href="#main-job-nothing">Skip to content</a>
+  <header class="titlebar"><svg class="ic" aria-hidden="true"><use href="#i-app"/></svg><span>Job #5: checks.x86_64-linux.* — freezer</span></header>
+  <div class="toolbar"><a class="tb " href="#index"><svg class="ic" aria-hidden="true"><use href="#i-back"/></svg><span class="lbl">Jobs</span></a><a class="tb " href="#job-nothing"><svg class="ic" aria-hidden="true"><use href="#i-reload"/></svg><span class="lbl">Reload</span></a></div>
+  <nav class="pathbar" aria-label="Location"><a class="btn btn-path" href="#index"><svg class="ic" aria-hidden="true"><use href="#i-app"/></svg><span>freezer</span></a><a class="btn btn-path" href="#index"><svg class="ic" aria-hidden="true"><use href="#i-pkg"/></svg><span>acme-web</span></a><a class="btn btn-path" aria-current="page" href="#job-nothing"><span>#5 <code>checks.x86_64-linux.*</code></span></a></nav>
+  <div class="infobar warning" role="status"><svg class="ic ic-lg" aria-hidden="true"><use href="#i-warn"/></svg><div class="msg"><p class="primary">The glob matched nothing.</p><p><code>checks.x86_64-linux.*</code> expanded to no attributes, so nothing was verified or published. Check the build list in <code>.freezer.yaml</code>.</p></div></div>
+  <main class="content" id="main-job-nothing" tabindex="-1"><div class="hero"><svg class="ic ic-xl" aria-hidden="true"><use href="#i-none"/></svg><div><h1>checks.x86_64-linux.*</h1><div class="sub"><b>matched nothing</b> in 2s · 2026-10-08 18:41 · acme-web @ <code>2c7f0e94</code></div></div></div>
+<div class="section"><dl class="props">
+  <dt>Repository</dt><dd><a href="#index">acme-web</a> <span style="color:var(--fz-muted)">(example/acme-web)</span></dd>
+  <dt>Started</dt><dd><time datetime="2026-10-08T18:41:10+08:00">2026-10-08 18:41:10 +08:00</time></dd>
+  <dt>Duration</dt><dd>2s</dd>
+  <dt>Commit</dt><dd class="sha">2c7f0e94b1d3a8c56e2f7d0b9a4c1e3f58d7b260</dd>
+  <dt>Finished</dt><dd>2026-10-08 18:41:12 +08:00</dd>
+  <dt>Cache</dt><dd><span class="pending">not probed — nothing matched</span></dd>
+  <dt>Published</dt><dd>0 paths</dd>
+</dl></div>
+<div class="section"><div class="section-head"><h2>Transcript</h2><span class="aside">2 lines</span><span class="push"><a class="btn btn-sm" href="#"><svg class="ic" aria-hidden="true"><use href="#i-text"/></svg>Open as plain text</a></span></div><div class="textview" tabindex="0" role="region" aria-label="Transcript"><pre style="--first:0"><span class="l cmd">$ nix eval --json .#checks.x86_64-linux --apply builtins.attrNames</span><span class="l ">entry checks.x86_64-linux.* matched nothing</span><span id="end-5"></span></pre></div></div></main>
+  <footer class="statusbar"><span class="grow"><span class="st st-nothing"><svg class="ic" aria-hidden="true"><use href="#i-none"/></svg><span class="w">matched nothing</span></span> · Job #5 · acme-web · <code>2c7f0e94</code></span><span class="opt">Updated 21:47:05 +08:00</span></footer>
+</section>
+<section class="screen" id="job-hit" aria-label="mock screen: Job #4: packages.x86_64-linux.cli — freezer">
+  <a id="shot-job-hit" class="vh" tabindex="-1">screenshot anchor</a>
+  <a class="skip" href="#main-job-hit">Skip to content</a>
+  <header class="titlebar"><svg class="ic" aria-hidden="true"><use href="#i-app"/></svg><span>Job #4: packages.x86_64-linux.cli — freezer</span></header>
+  <div class="toolbar"><a class="tb " href="#index"><svg class="ic" aria-hidden="true"><use href="#i-back"/></svg><span class="lbl">Jobs</span></a><a class="tb " href="#job-hit"><svg class="ic" aria-hidden="true"><use href="#i-reload"/></svg><span class="lbl">Reload</span></a></div>
+  <nav class="pathbar" aria-label="Location"><a class="btn btn-path" href="#index"><svg class="ic" aria-hidden="true"><use href="#i-app"/></svg><span>freezer</span></a><a class="btn btn-path" href="#index"><svg class="ic" aria-hidden="true"><use href="#i-pkg"/></svg><span>acme-cli</span></a><a class="btn btn-path" aria-current="page" href="#job-hit"><span>#4 <code>packages.x86_64-linux.cli</code></span></a></nav>
+  
+  <main class="content" id="main-job-hit" tabindex="-1"><div class="hero"><svg class="ic ic-xl" aria-hidden="true"><use href="#i-hit"/></svg><div><h1>packages.x86_64-linux.cli</h1><div class="sub"><b>succeeded</b> from the cache in 80ms · 2026-10-07 19:41 · acme-cli @ <code>7b1e5d3c</code></div></div></div>
+<div class="section"><dl class="props">
+  <dt>Repository</dt><dd><a href="#index">acme-cli</a> <span style="color:var(--fz-muted)">(example/acme-cli)</span></dd>
+  <dt>Started</dt><dd><time datetime="2026-10-07T19:41:02+08:00">2026-10-07 19:41:02 +08:00</time></dd>
+  <dt>Duration</dt><dd>80ms</dd>
+  <dt>Commit</dt><dd class="sha">7b1e5d3c90af4e21b6c8d2f7a3e05b9c1d4f6a82</dd>
+  <dt>Finished</dt><dd>2026-10-07 19:41:02 +08:00</dd>
+  <dt>Cache</dt><dd>hit — every output was already published</dd>
+  <dt>Published</dt><dd>1 path</dd>
+</dl></div>
+<div class="section"><div class="section-head"><h2>Transcript</h2><span class="aside">not kept</span><span class="push"></span></div><div class="textview empty"><svg class="ic ic-xl" aria-hidden="true"><use href="#i-hit"/></svg><p><b>Already in the cache.</b></p><p>Every output of this entry was published before, so nothing was built and no transcript was kept. Build now republishes it.</p></div></div></main>
+  <footer class="statusbar"><span class="grow"><span class="st st-hit"><svg class="ic" aria-hidden="true"><use href="#i-hit"/></svg><span class="w">succeeded</span></span> · Job #4 · acme-cli · <code>7b1e5d3c</code></span><span class="opt">Updated 21:47:05 +08:00</span></footer>
+</section>
+<section class="screen" id="job-truncated" aria-label="mock screen: Job #7: packages.x86_64-linux.docs — freezer">
+  <a id="shot-job-truncated" class="vh" tabindex="-1">screenshot anchor</a>
+  <a class="skip" href="#main-job-truncated">Skip to content</a>
+  <header class="titlebar"><svg class="ic" aria-hidden="true"><use href="#i-app"/></svg><span>Job #7: packages.x86_64-linux.docs — freezer</span></header>
+  <div class="toolbar"><a class="tb " href="#index"><svg class="ic" aria-hidden="true"><use href="#i-back"/></svg><span class="lbl">Jobs</span></a><a class="tb " href="#job-truncated"><svg class="ic" aria-hidden="true"><use href="#i-reload"/></svg><span class="lbl">Reload</span></a></div>
+  <nav class="pathbar" aria-label="Location"><a class="btn btn-path" href="#index"><svg class="ic" aria-hidden="true"><use href="#i-app"/></svg><span>freezer</span></a><a class="btn btn-path" href="#index"><svg class="ic" aria-hidden="true"><use href="#i-pkg"/></svg><span>acme-web</span></a><a class="btn btn-path" aria-current="page" href="#job-truncated"><span>#7 <code>packages.x86_64-linux.docs</code></span></a></nav>
+  
+  <main class="content" id="main-job-truncated" tabindex="-1"><div class="hero"><svg class="ic ic-xl" aria-hidden="true"><use href="#i-ok"/></svg><div><h1>packages.x86_64-linux.docs</h1><div class="sub"><b>succeeded</b> in 6m 42s · 2026-10-08 20:11 · acme-web @ <code>4e8d1b07</code></div></div></div>
+<div class="section"><dl class="props">
+  <dt>Repository</dt><dd><a href="#index">acme-web</a> <span style="color:var(--fz-muted)">(example/acme-web)</span></dd>
+  <dt>Started</dt><dd><time datetime="2026-10-08T20:11:00+08:00">2026-10-08 20:11:00 +08:00</time></dd>
+  <dt>Duration</dt><dd>6m 42s</dd>
+  <dt>Commit</dt><dd class="sha">4e8d1b07c3a2f95e6d0b7c18a4f3e2d1905b6c7a</dd>
+  <dt>Finished</dt><dd>2026-10-08 20:17:42 +08:00</dd>
+  <dt>Cache</dt><dd>miss — built and published</dd>
+  <dt>Published</dt><dd>1 path</dd>
+</dl></div>
+<div class="section"><div class="section-head"><h2>Transcript</h2><span class="aside">last 2,000 of 2,602 lines</span><span class="push"><a class="btn btn-sm" href="#"><svg class="ic" aria-hidden="true"><use href="#i-text"/></svg>Open as plain text</a></span></div><div class="textview" tabindex="0" role="region" aria-label="Transcript"><pre style="--first:2560"><span class="gap">Lines 1–602 are only in the plain-text transcript. (Mock: lines 603–2,560 elided.)</span><span class="l ">[2560/2600 built] building &#x27;/nix/store/cccccccccccccccccccccccccccccccc-doc-page-2560.drv&#x27;...</span><span class="l ">[2561/2600 built] building &#x27;/nix/store/cccccccccccccccccccccccccccccccc-doc-page-2561.drv&#x27;...</span><span class="l ">[2562/2600 built] building &#x27;/nix/store/cccccccccccccccccccccccccccccccc-doc-page-2562.drv&#x27;...</span><span class="l ">[2563/2600 built] building &#x27;/nix/store/cccccccccccccccccccccccccccccccc-doc-page-2563.drv&#x27;...</span><span class="l ">[2564/2600 built] building &#x27;/nix/store/cccccccccccccccccccccccccccccccc-doc-page-2564.drv&#x27;...</span><span class="l ">[2565/2600 built] building &#x27;/nix/store/cccccccccccccccccccccccccccccccc-doc-page-2565.drv&#x27;...</span><span class="l ">[2566/2600 built] building &#x27;/nix/store/cccccccccccccccccccccccccccccccc-doc-page-2566.drv&#x27;...</span><span class="l ">[2567/2600 built] building &#x27;/nix/store/cccccccccccccccccccccccccccccccc-doc-page-2567.drv&#x27;...</span><span class="l ">[2568/2600 built] building &#x27;/nix/store/cccccccccccccccccccccccccccccccc-doc-page-2568.drv&#x27;...</span><span class="l ">[2569/2600 built] building &#x27;/nix/store/cccccccccccccccccccccccccccccccc-doc-page-2569.drv&#x27;...</span><span class="l ">[2570/2600 built] building &#x27;/nix/store/cccccccccccccccccccccccccccccccc-doc-page-2570.drv&#x27;...</span><span class="l ">[2571/2600 built] building &#x27;/nix/store/cccccccccccccccccccccccccccccccc-doc-page-2571.drv&#x27;...</span><span class="l ">[2572/2600 built] building &#x27;/nix/store/cccccccccccccccccccccccccccccccc-doc-page-2572.drv&#x27;...</span><span class="l ">[2573/2600 built] building &#x27;/nix/store/cccccccccccccccccccccccccccccccc-doc-page-2573.drv&#x27;...</span><span class="l ">[2574/2600 built] building &#x27;/nix/store/cccccccccccccccccccccccccccccccc-doc-page-2574.drv&#x27;...</span><span class="l ">[2575/2600 built] building &#x27;/nix/store/cccccccccccccccccccccccccccccccc-doc-page-2575.drv&#x27;...</span><span class="l ">[2576/2600 built] building &#x27;/nix/store/cccccccccccccccccccccccccccccccc-doc-page-2576.drv&#x27;...</span><span class="l ">[2577/2600 built] building &#x27;/nix/store/cccccccccccccccccccccccccccccccc-doc-page-2577.drv&#x27;...</span><span class="l ">[2578/2600 built] building &#x27;/nix/store/cccccccccccccccccccccccccccccccc-doc-page-2578.drv&#x27;...</span><span class="l ">[2579/2600 built] building &#x27;/nix/store/cccccccccccccccccccccccccccccccc-doc-page-2579.drv&#x27;...</span><span class="l ">[2580/2600 built] building &#x27;/nix/store/cccccccccccccccccccccccccccccccc-doc-page-2580.drv&#x27;...</span><span class="l ">[2581/2600 built] building &#x27;/nix/store/cccccccccccccccccccccccccccccccc-doc-page-2581.drv&#x27;...</span><span class="l ">[2582/2600 built] building &#x27;/nix/store/cccccccccccccccccccccccccccccccc-doc-page-2582.drv&#x27;...</span><span class="l ">[2583/2600 built] building &#x27;/nix/store/cccccccccccccccccccccccccccccccc-doc-page-2583.drv&#x27;...</span><span class="l ">[2584/2600 built] building &#x27;/nix/store/cccccccccccccccccccccccccccccccc-doc-page-2584.drv&#x27;...</span><span class="l ">[2585/2600 built] building &#x27;/nix/store/cccccccccccccccccccccccccccccccc-doc-page-2585.drv&#x27;...</span><span class="l ">[2586/2600 built] building &#x27;/nix/store/cccccccccccccccccccccccccccccccc-doc-page-2586.drv&#x27;...</span><span class="l ">[2587/2600 built] building &#x27;/nix/store/cccccccccccccccccccccccccccccccc-doc-page-2587.drv&#x27;...</span><span class="l ">[2588/2600 built] building &#x27;/nix/store/cccccccccccccccccccccccccccccccc-doc-page-2588.drv&#x27;...</span><span class="l ">[2589/2600 built] building &#x27;/nix/store/cccccccccccccccccccccccccccccccc-doc-page-2589.drv&#x27;...</span><span class="l ">[2590/2600 built] building &#x27;/nix/store/cccccccccccccccccccccccccccccccc-doc-page-2590.drv&#x27;...</span><span class="l ">[2591/2600 built] building &#x27;/nix/store/cccccccccccccccccccccccccccccccc-doc-page-2591.drv&#x27;...</span><span class="l ">[2592/2600 built] building &#x27;/nix/store/cccccccccccccccccccccccccccccccc-doc-page-2592.drv&#x27;...</span><span class="l ">[2593/2600 built] building &#x27;/nix/store/cccccccccccccccccccccccccccccccc-doc-page-2593.drv&#x27;...</span><span class="l ">[2594/2600 built] building &#x27;/nix/store/cccccccccccccccccccccccccccccccc-doc-page-2594.drv&#x27;...</span><span class="l ">[2595/2600 built] building &#x27;/nix/store/cccccccccccccccccccccccccccccccc-doc-page-2595.drv&#x27;...</span><span class="l ">[2596/2600 built] building &#x27;/nix/store/cccccccccccccccccccccccccccccccc-doc-page-2596.drv&#x27;...</span><span class="l ">[2597/2600 built] building &#x27;/nix/store/cccccccccccccccccccccccccccccccc-doc-page-2597.drv&#x27;...</span><span class="l ">[2598/2600 built] building &#x27;/nix/store/cccccccccccccccccccccccccccccccc-doc-page-2598.drv&#x27;...</span><span class="l ">[2599/2600 built] building &#x27;/nix/store/cccccccccccccccccccccccccccccccc-doc-page-2599.drv&#x27;...</span><span class="l ">copying 412 paths...</span><span class="l ">copied /nix/store/d0c5q1w2e3r4t5y6u7i8o9p0a1s2d3f4-acme-docs-2026.10.08 to s3://freezer-cache</span><span id="end-7"></span></pre></div></div></main>
+  <footer class="statusbar"><span class="grow"><span class="st st-succeeded"><svg class="ic" aria-hidden="true"><use href="#i-ok"/></svg><span class="w">succeeded</span></span> · Job #7 · acme-web · <code>4e8d1b07</code></span><span class="opt">Updated 21:47:05 +08:00</span></footer>
+</section>
+<section class="screen" id="empty" aria-label="mock screen: Jobs — freezer">
+  <a id="shot-empty" class="vh" tabindex="-1">screenshot anchor</a>
+  <a class="skip" href="#main-empty">Skip to content</a>
+  <header class="titlebar"><svg class="ic" aria-hidden="true"><use href="#i-app"/></svg><span>Jobs — freezer</span></header>
+  <div class="toolbar"><a class="tb " href="#empty"><svg class="ic" aria-hidden="true"><use href="#i-reload"/></svg><span class="lbl">Reload</span></a><span class="tb-sep" aria-hidden="true"></span><a class="tb " href="#empty" aria-pressed="false"><svg class="ic" aria-hidden="true"><use href="#i-clock"/></svg><span class="lbl">Auto-refresh<span class="lbl-long"> (off)</span></span></a></div>
+  
+  
+  <main class="content" id="main-empty" tabindex="-1">
+<div class="section">
+  <h1 class="vh">Jobs</h1>
+  <div class="section-head"><h2>Repositories</h2><span class="aside">1 registered</span></div>
+  <div class="tv"><table>
+<thead><tr><th scope="col">Repository</th><th scope="col" class="c-hide">Forge</th><th scope="col" class="c-hide">Last built</th><th scope="col" class="c-hide">Latest job</th><th scope="col"><span class="vh">Action</span></th></tr></thead>
+<tbody><tr id="repo-acme-web">
+  <th scope="row" class="name"><span class="st" style="font-weight:bold"><svg class="ic" aria-hidden="true"><use href="#i-pkg"/></svg>acme-web</span><span class="sub">never built</span></th>
+  <td class="c-hide"><code>example/acme-web</code></td>
+  <td class="c-hide"><span class="never">never built</span></td>
+  <td class="c-hide"><span class="never">no jobs</span></td>
+  <td class="act"><form method="post" action="/build/acme-web"><button class="btn btn-sm" type="submit" aria-describedby="build-now-help"><svg class="ic" aria-hidden="true"><use href="#i-play"/></svg>Build now</button></form></td>
+</tr></tbody></table></div>
+<p class="hint" id="build-now-help">Build now rebuilds the head of the default branch and republishes it, even if that commit was built before.</p>
+</div>
+<div class="section">
+  <div class="section-head"><h2>Recent jobs</h2></div>
+  <div class="tv"><div class="tv-empty"><strong>No jobs yet.</strong><p>A push to the default branch of a registered repository starts one, or use Build now above.</p></div></div>
+</div>
+<div class="section">
+  <div class="section-head"><h2>Repositories (when none are configured)</h2></div>
+  <div class="tv"><div class="tv-empty"><strong>No repositories are registered.</strong><p>Repositories are named in the server's config file. Add one there and restart freezer.</p></div></div>
+</div></main>
+  <footer class="statusbar"><span class="grow">No jobs · 1 repository</span><span>Updated 21:47:05 +08:00</span></footer>
+</section>
+<section class="screen" id="e404" aria-label="mock screen: No such job — freezer">
+  <a id="shot-e404" class="vh" tabindex="-1">screenshot anchor</a>
+  <a class="skip" href="#main-e404">Skip to content</a>
+  <header class="titlebar"><svg class="ic" aria-hidden="true"><use href="#i-app"/></svg><span>No such job — freezer</span></header>
+  <div class="toolbar"><a class="tb " href="#index"><svg class="ic" aria-hidden="true"><use href="#i-back"/></svg><span class="lbl">Jobs</span></a></div>
+  <nav class="pathbar" aria-label="Location"><a class="btn btn-path" aria-current="page" href="#index"><svg class="ic" aria-hidden="true"><use href="#i-app"/></svg><span>freezer</span></a></nav>
+  
+  <main class="content" id="main-e404" tabindex="-1"><div class="dialog" role="alertdialog" aria-labelledby="e404-h" aria-describedby="e404-d">
+<div class="dt" aria-hidden="true">freezer</div>
+<div class="db"><svg class="ic ic-dlg" aria-hidden="true"><use href="#i-warn"/></svg><div><h1 id="e404-h">No such job</h1><p id="e404-d">There is no job #999999.</p><p class="code">HTTP 404</p></div></div>
+<div class="da"><a class="btn btn-default" href="#index"><svg class="ic" aria-hidden="true"><use href="#i-back"/></svg>Back to jobs</a></div></div></main>
+  <footer class="statusbar"><span class="grow">HTTP 404</span></footer>
+</section>
+<section class="screen" id="e409" aria-label="mock screen: Job #8 is not running — freezer">
+  <a id="shot-e409" class="vh" tabindex="-1">screenshot anchor</a>
+  <a class="skip" href="#main-e409">Skip to content</a>
+  <header class="titlebar"><svg class="ic" aria-hidden="true"><use href="#i-app"/></svg><span>Job #8 is not running — freezer</span></header>
+  <div class="toolbar"><a class="tb " href="#index"><svg class="ic" aria-hidden="true"><use href="#i-back"/></svg><span class="lbl">Jobs</span></a></div>
+  <nav class="pathbar" aria-label="Location"><a class="btn btn-path" aria-current="page" href="#index"><svg class="ic" aria-hidden="true"><use href="#i-app"/></svg><span>freezer</span></a></nav>
+  
+  <main class="content" id="main-e409" tabindex="-1"><div class="dialog" role="alertdialog" aria-labelledby="e409-h" aria-describedby="e409-d">
+<div class="dt" aria-hidden="true">freezer</div>
+<div class="db"><svg class="ic ic-dlg" aria-hidden="true"><use href="#i-info"/></svg><div><h1 id="e409-h">Job #8 is not running</h1><p id="e409-d">It finished before the stop arrived, so there was nothing to stop.</p><p class="code">HTTP 409</p></div></div>
+<div class="da"><a class="btn" href="#index"><svg class="ic" aria-hidden="true"><use href="#i-back"/></svg>Back to jobs</a><a class="btn btn-default" href="#job-running">Open job #8</a></div></div></main>
+  <footer class="statusbar"><span class="grow">HTTP 409</span></footer>
+</section>
+</body>
+</html>

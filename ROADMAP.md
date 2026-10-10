@@ -6,7 +6,7 @@ The loop written in v0 is not scaffolding: those functions become the job runner
 
 ## v0 — the loop is real
 
-**Scope.** The whole job loop: expand (glob or exact entry), `.outPath`, probe, `copy`. Plus the configuration struct and its YAML loading, entry parsing, per-entry results and log capture, and a per-job timeout.
+**Scope.** The whole job loop: expand (glob or exact entry), `.outPath`, probe, `copy`. Plus the configuration struct and its YAML loading, entry parsing, per-entry results and transcript capture, and a per-job timeout.
 
 **Not in v0.** HTTP, database, UI, webhook, commit status, scheduling, cancellation. Nothing is persisted — v0 is driven by tests, not operated.
 
@@ -27,7 +27,7 @@ The loop written in v0 is not scaffolding: those functions become the job runner
 
 ## v1 — the service exists
 
-**Scope.** The configuration file, the HTTP server, the webhook with HMAC verification and default-branch resolution, SQLite state through GORM, commit statuses, scheduling (one event per repository, coalescing, the global cap), the job timeout and manual cancel, and the read-only UI with build now and stop. The UI is not optional here: the CLI does not exist, so it is the only control surface.
+**Scope.** The configuration file, the HTTP server, the webhook with HMAC verification and default-branch resolution, SQLite state through GORM, commit statuses, scheduling (one event per repository, coalescing, the global cap), the job timeout and Stop, and the UI with Build now and Stop. The UI is not optional here: the CLI does not exist, so it is the only control surface.
 
 **Acceptance** — driving the built binary over HTTP:
 
@@ -37,11 +37,13 @@ The loop written in v0 is not scaffolding: those functions become the job runner
 4. A push to a non-default branch is ignored.
 5. A push with a bad signature produces no job at all.
 6. An event arriving during a build of the same repository queues behind it rather than running concurrently.
-7. Commit statuses go pending then success, carrying the failed-entry count.
+7. Commit statuses go pending, then success or failure, carrying the failed-entry count.
 8. An event where every entry is a cache hit still reports success.
 9. Build now over HTTP skips the probe and re-runs the copy.
 10. Stop aborts a running job before its timeout.
 11. A restart preserves the last-built record, so nothing is rebuilt.
+
+UI acceptance criteria are in [docs/design/freezer-ui-clearlooks.md](docs/design/freezer-ui-clearlooks.md), section 6.
 
 **Doubles.** Two, both network stand-ins for real services rather than in-process fakes: the S3 service for R2, and a local `httptest` server for `api.github.com`, reached through the configurable API base (ADR 0021).
 
@@ -54,7 +56,7 @@ The loop written in v0 is not scaffolding: those functions become the job runner
 1. After the module's configuration is applied, the service runs with the right user, state directory, key path and environment.
 2. Publishing to the real R2 bucket, and substituting from it through the public custom domain, both work.
 3. Freezer builds its own flake outputs through itself, and a second run is a cache hit.
-4. Retention actually deletes old jobs and their logs.
+4. Retention actually deletes old jobs and their transcripts.
 5. The repair recipe is executed once for real: a broken object is deleted, build now is pressed, and substitution succeeds afterwards.
 
 ## Deferred — not in any of the three phases
@@ -62,3 +64,11 @@ The loop written in v0 is not scaffolding: those functions become the job runner
 `^output` selectors and `^*`; publishing `.drv` files; content-addressed derivations and realisations; metrics; automatic retries; store garbage collection; private repositories; pull requests and forks; forges other than GitHub; cache purge or repair tooling; users, roles and authentication.
 
 Each of these is either recorded as a limitation in an ADR or a decision not to build something; none of them is half-built and waiting.
+
+## Open questions
+
+These were open forks in the design. ADR 0019 and ADR 0004 already answer them: confirm each answer, or supersede the ADR, before v1.
+
+- **Global build cap.** Is there a server-wide cap on concurrent builds across repositories, or only per-repository serialization plus the per-event glob cap? ADR 0019 adds a global cap (config).
+- **Concurrency inside an event.** Do one event's jobs build concurrently, or one after another? ADR 0019 answers: concurrently, bounded by the global cap.
+- **Default branch source.** Is the default branch read from git (the remote's `HEAD`) or from the webhook payload? ADR 0004 answers: git, via `git ls-remote --symref`. The payload only shows whether a push touched that branch.

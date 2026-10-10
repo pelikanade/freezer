@@ -12,4 +12,4 @@ Scheduling, which no earlier document decided:
 - One repository cannot occupy the whole machine, and one repository's backlog cannot block another's.
 - The per-repository serialization is what makes a hung build expensive: it blocks that repository's later commits until the job timeout or a manual stop fires, which is why both exist.
 - A superseded event leaves no trace — no commit status is posted for a commit that was coalesced away. The status on the newest commit is the report for the repository, and ADR 0013 already records that silence is therefore ambiguous.
-- Jobs inside one event write records and log lines into a single SQLite file, which permits one writer at a time; those writes are serialized through one path rather than retried (ADR 0014).
+- Jobs inside one event write records and transcript lines into a single SQLite file, which permits one writer at a time; those writes are serialized through one path rather than retried (ADR 0014).
