@@ -2,7 +2,7 @@
 
 A self-hosted, webhook-driven build service for nix flakes. It publishes built store paths to a public, signed, S3-compatible binary cache (Cloudflare R2), so consumers substitute them instead of rebuilding.
 
-Status: rewriting from scratch. The first implementation was dropped on 2026-10-08. There is no application code yet; the build order is in [ROADMAP.md](ROADMAP.md).
+Status: implementing the rewrite. The real Nix/S3 loop now publishes exact entries and verifies substitution, hashes and signatures against a scratch store. The service and UI are still being implemented; progress and acceptance are in [ROADMAP.md](ROADMAP.md).
 
 ## Problem
 
@@ -68,6 +68,10 @@ Each job keeps its full transcript: the commands run and their output, stored ve
 ## UI
 
 The decided look is Clearlooks (GNOME 2 era) chrome as structure, not costume: one hand-written stylesheet, no CSS framework, no JavaScript required, light only. The full spec, mock, and UI acceptance criteria are in [docs/design/freezer-ui-clearlooks.md](docs/design/freezer-ui-clearlooks.md).
+
+## Development
+
+Run `devenv test` with the host Nix daemon available (Nix 2.34 is tested). It starts a loopback Silo S3 service, runs the end-to-end tests, and records current results in `.devenv/acceptance.log`. Tests use throwaway Git repositories, a locked static BusyBox fixture input, fresh signing keys and scratch Nix stores. The test bucket is cleared before each test. Do not point this environment at a production bucket.
 
 ## Documents
 

@@ -4,6 +4,11 @@ Three phases, sized by scope and not by time. Each phase ends when its acceptanc
 
 The loop written in v0 is not scaffolding: those functions become the job runner the service calls in v1.
 
+## Implementation evidence
+
+- Foundations and v0 acceptance 1–2: `devenv test` passed on 2026-10-10 (2 tests). Real S3 publication, positive probe, scratch-store substitution, content and signature verification. Current output: `.devenv/acceptance.log`.
+- Remaining: v0 acceptance 3–10, YAML/entry loading, v1 service and UI, and v2 packaging and real-host acceptance.
+
 ## v0 — the loop is real
 
 **Scope.** The whole job loop: expand (glob or exact entry), `.outPath`, probe, `copy`. Plus the configuration struct and its YAML loading, entry parsing, per-entry results and transcript capture, and a per-job timeout.
