@@ -10,7 +10,8 @@ The loop written in v0 is not scaffolding: those functions become the job runner
 - v1 service complete: all eleven HTTP acceptance items passed on 2026-10-10, plus interrupted-transcript recovery and missing-build-list rejection (24 tests total, 64.478 s). Actual browser smoke exercised Build now against the built binary and S3, producing succeeded, failed and matched-nothing jobs.
 - v1 UI complete: all seventeen UI acceptance items exercised in Chromium at 1280×800 and 390×844, including no-JavaScript actions, paging, state-specific views, keyboard focus and measured contrast. Full regression: 27 tests passed in 80.316 s. Local screenshots and the item-by-item record live in `.project-map/ui-evidence.json`.
 - v2 retention implemented: HTTP acceptance passed (5.238 s), and an actual service restart with `retention: 2` removed job 59 and its transcript from a 61-job fixture while jobs 60–61 remained readable. This is local evidence, not real-host v2 acceptance.
-- Remaining: flake package, NixOS module, runbook and all five real-host acceptance items.
+- v2 packaging implemented: `nix build .#default` built a static x86-64 executable; the installed package served HTTP and published an output whose S3 contents/signature verified. `nix flake check --all-systems` passed; aarch64 was evaluated, not built. The generated NixOS unit passed `systemd-analyze verify`. [The runbook](docs/runbook.md) and the repository's own `.freezer.yaml` are present.
+- Remaining: all five real-host acceptance items. No deployment host, R2 credentials or public custom domain are configured in this session; their acceptance record is explicitly waiting in the runbook.
 
 ## v0 — the loop is real
 

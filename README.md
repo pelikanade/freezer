@@ -2,7 +2,7 @@
 
 A self-hosted, webhook-driven build service for nix flakes. It publishes built store paths to a public, signed, S3-compatible binary cache (Cloudflare R2), so consumers substitute them instead of rebuilding.
 
-Status: v0, v1 and retention implemented and verified. Flake packaging and real-host deployment follow. Progress and acceptance are in [ROADMAP.md](ROADMAP.md).
+Status: implementation complete through the local v2 deliverables: build loop, service, Clearlooks UI, retention, flake package, NixOS module and repair runbook. Real-host/R2 acceptance remains pending; see [ROADMAP.md](ROADMAP.md) and the [runbook](docs/runbook.md).
 
 ## Problem
 
@@ -87,6 +87,8 @@ Only the final attribute component may contain a glob (`*`, `?`, or character cl
 
 Build with `devenv shell -- go build -o .devenv/freezer .`, then run `.devenv/freezer /path/to/server.yaml`. The binary has one mode and takes only the configuration filename. Bind to localhost behind an authenticated reverse proxy or SSH tunnel. Expose only `/hooks/<name>` to GitHub, configured for push events and the matching per-repository secret.
 
+For the packaged executable, run `nix build` and then `./result/bin/freezer /path/to/server.yaml`. The flake exports `packages.<system>.default` and `nixosModules.default`; [the runbook](docs/runbook.md#install-with-nixos) covers module configuration, secret files, public-domain substitution, self-hosting, retention and repair. Nix 2.34 is tested; use at least 2.33.6 for the backported path-addressing option if using Nix 2.33.
+
 ```yaml
 listen: 127.0.0.1:8080
 state_dir: /var/lib/freezer
@@ -118,3 +120,4 @@ State lives in `state_dir/freezer.sqlite`; persistent checkouts live under `stat
 - [ROADMAP.md](ROADMAP.md): phases, acceptance lists, deferred work, and resolved questions.
 - [docs/adr/](docs/adr/): decisions and why they were made.
 - [docs/design/](docs/design/): the UI spec and its prototype.
+- [docs/runbook.md](docs/runbook.md): deployment, cache verification and repair, backups, self-hosting, and the real-host acceptance record.
