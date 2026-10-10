@@ -55,6 +55,7 @@
       '';
       notDerivation = 42;
       optionPath = { outPath = "--version"; };
+      whitespacePath = { outPath = "${self.packages.${system}.hello.outPath}\n"; };
     };
     selected.${system} = {
       alpha = self.packages.${system}.hello;

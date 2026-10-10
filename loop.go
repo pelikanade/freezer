@@ -70,7 +70,7 @@ func runCommand(ctx context.Context, transcript io.Writer, name string, args ...
 	if ctx.Err() != nil {
 		err = ctx.Err()
 	}
-	return strings.TrimSpace(stdout.String()), err
+	return stdout.String(), err
 }
 
 func runNix(ctx context.Context, transcript io.Writer, args ...string) (string, error) {
@@ -169,8 +169,8 @@ func RunJob(ctx context.Context, cfg Config, flake, entry string, force bool, re
 		stream = io.MultiWriter(&transcript, record)
 	}
 	out, err := runNix(ctx, stream, "eval", "--raw", "--option", "allow-import-from-derivation", "false", "--", flake+"#"+entry+".outPath")
-	if err == nil && !force {
-		if published, probeErr := runNix(ctx, stream, "path-info", "--store", cfg.Cache.StoreURL(), "--", out); probeErr == nil && published == out {
+	if err == nil && out != "" && !force {
+		if published, probeErr := runNix(ctx, stream, "path-info", "--store", cfg.Cache.StoreURL(), "--", out); probeErr == nil && strings.TrimSuffix(published, "\n") == out {
 			result.CacheHit = true
 			result.Transcript = transcript.String()
 			return result

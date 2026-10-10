@@ -83,7 +83,7 @@ entries:
 
 Only the final attribute component may contain a glob (`*`, `?`, or character classes). Quoted Nix attribute names are accepted; output selectors (`^dev`, `^*`) are not. Unknown YAML fields and invalid entries reject the build list before Nix runs. `glob_cap` defaults to 200 total glob matches per event; a pattern that would exceed the remaining allowance fails entirely. `job_timeout` defaults to `30m` and includes evaluation, probing and publication. The signing key is passed by filename to Nix and is never read by Freezer.
 
-Nix invocations separate options from paths with `--`. A probe is a hit only when Nix succeeds and reports the exact evaluated output path; an option-like `outPath` such as `--version` cannot masquerade as a published path. Static HTTP assets are limited to the stylesheet; templates are rendered only by the application.
+Nix invocations separate options from paths with `--` and preserve evaluated path bytes. A probe is a hit only when Nix succeeds and reports that exact path; option-like values or extra whitespace cannot masquerade as a different published path. Static HTTP assets are limited to the stylesheet; templates are rendered only by the application.
 
 ## Running the service
 

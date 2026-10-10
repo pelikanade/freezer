@@ -292,3 +292,15 @@ func TestOptionLikeOutputCannotBecomeCacheHit(t *testing.T) {
 		t.Fatalf("option-like output bypassed publication: %+v", results)
 	}
 }
+
+func TestWhitespaceOutputCannotMatchAnotherStorePath(t *testing.T) {
+	f := newFixture(t)
+	published := RunLoop(context.Background(), f.config(), f.repo(), []string{f.entry("hello")}, false)
+	if published[0].Status != "succeeded" {
+		t.Fatalf("publish: %+v", published)
+	}
+	results := RunLoop(context.Background(), f.config(), f.repo(), []string{f.entry("whitespacePath")}, false)
+	if results[0].CacheHit || !strings.Contains(results[0].Transcript, "$ nix copy") {
+		t.Fatalf("probe normalized an invalid output into a different published path: %+v", results)
+	}
+}

@@ -542,6 +542,14 @@ func TestRetentionDeletesJobsAndTranscripts(t *testing.T) {
 	s.build(t)
 	s.setEntries(t, s.entry("hello"))
 	s.build(t)
+	transcripts := make(map[int]string, 2)
+	for _, id := range []int{2, 3} {
+		code, body := s.get(t, fmt.Sprintf("/jobs/%d/log", id))
+		if code != 200 {
+			t.Fatalf("recent transcript %d: HTTP %d", id, code)
+		}
+		transcripts[id] = body
+	}
 	s.stop(t)
 	data, err := os.ReadFile(s.configPath)
 	if err != nil {
@@ -558,8 +566,8 @@ func TestRetentionDeletesJobsAndTranscripts(t *testing.T) {
 		}
 	}
 	for _, id := range []int{2, 3} {
-		if code, body := s.get(t, fmt.Sprintf("/jobs/%d/log", id)); code != 200 || body == "" {
-			t.Fatalf("retention removed recent transcript %d: %d", id, code)
+		if code, body := s.get(t, fmt.Sprintf("/jobs/%d/log", id)); code != 200 || body != transcripts[id] {
+			t.Fatalf("retention changed recent transcript %d: HTTP %d", id, code)
 		}
 	}
 	s.setEntries(t, s.entry("second"))
