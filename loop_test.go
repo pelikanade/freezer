@@ -91,7 +91,20 @@ func (f fixture) out(t *testing.T, name string) string {
 
 func TestExactEntryPublishes(t *testing.T) {
 	f := newFixture(t)
-	results := RunLoop(context.Background(), f.config(), f.repo(), []string{f.entry("hello")}, false)
+	data := fmt.Sprintf("cache:\n  bucket: %s\n  endpoint: %s\n  signing_key: %s\nglob_cap: 200\njob_timeout: 1m\n", f.bucket, f.endpoint, f.key)
+	configPath := filepath.Join(f.dir, "server.yaml")
+	if err := os.WriteFile(configPath, []byte(data), 0600); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := LoadConfig(configPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	entries, err := LoadBuildList(f.repo())
+	if err != nil {
+		t.Fatal(err)
+	}
+	results := RunLoop(context.Background(), cfg, f.repo(), entries, false)
 	if len(results) != 1 || results[0].Status != "succeeded" || results[0].CacheHit {
 		t.Fatalf("expected published entry, got %+v", results)
 	}
@@ -132,5 +145,142 @@ func TestPublishedPathSubstitutesWithSignature(t *testing.T) {
 	data, err := os.ReadFile(filepath.Join(root, out, "message"))
 	if err != nil || string(data) != "freezer fixture: freezer-hello\n" {
 		t.Fatalf("substituted content %q: %v", data, err)
+	}
+}
+
+func TestSecondRunIsCacheHit(t *testing.T) {
+	f := newFixture(t)
+	first := RunLoop(context.Background(), f.config(), f.repo(), []string{f.entry("hello")}, false)
+	if first[0].Status != "succeeded" {
+		t.Fatalf("first publish: %+v", first)
+	}
+	second := RunLoop(context.Background(), f.config(), f.repo(), []string{f.entry("hello")}, false)
+	if second[0].Status != "succeeded" || !second[0].CacheHit || second[0].Published != 0 || strings.Contains(second[0].Transcript, "$ nix copy") {
+		t.Fatalf("expected cache hit without publication: %+v", second)
+	}
+}
+
+func TestGlobPublishesEveryMatch(t *testing.T) {
+	f := newFixture(t)
+	results := RunLoop(context.Background(), f.config(), f.repo(), []string{"selected." + f.system + ".*"}, false)
+	if len(results) != 2 {
+		t.Fatalf("expected two matched jobs: %+v", results)
+	}
+	for _, result := range results {
+		if result.Status != "succeeded" || result.CacheHit {
+			t.Fatalf("glob job: %+v", result)
+		}
+	}
+	for _, name := range []string{"hello", "second"} {
+		nix(t, "path-info", "--store", f.store, f.out(t, name))
+	}
+}
+
+func TestGlobOverCapBuildsNothing(t *testing.T) {
+	f := newFixture(t)
+	cfg := f.config()
+	cfg.GlobCap = 1
+	results := RunLoop(context.Background(), cfg, f.repo(), []string{"selected." + f.system + ".*"}, false)
+	if len(results) != 1 || results[0].Status != "failed" || !strings.Contains(results[0].Error, "cap") {
+		t.Fatalf("expected whole pattern failure: %+v", results)
+	}
+	for _, name := range []string{"hello", "second"} {
+		nixFails(t, "path-info", "--store", f.store, f.out(t, name))
+	}
+}
+
+func nixFails(t *testing.T, args ...string) string {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+	defer cancel()
+	out, err := exec.CommandContext(ctx, "nix", append(args, nixTestOptions...)...).CombinedOutput()
+	if err == nil {
+		t.Fatalf("nix %q unexpectedly succeeded: %s", args, out)
+	}
+	if ctx.Err() != nil {
+		t.Fatalf("nix %q timed out: %s", args, out)
+	}
+	return string(out)
+}
+
+func TestMissingPrefixDoesNotBlockOtherEntries(t *testing.T) {
+	f := newFixture(t)
+	results := RunLoop(context.Background(), f.config(), f.repo(), []string{"missing." + f.system + ".*", f.entry("hello")}, false)
+	if len(results) != 2 || results[0].Status != "failed" || results[1].Status != "succeeded" {
+		t.Fatalf("expected isolated pattern failure: %+v", results)
+	}
+	nix(t, "path-info", "--store", f.store, f.out(t, "hello"))
+}
+
+func TestNonDerivationReportsCopyError(t *testing.T) {
+	f := newFixture(t)
+	results := RunLoop(context.Background(), f.config(), f.repo(), []string{f.entry("notDerivation")}, false)
+	if len(results) != 1 || results[0].Status != "failed" || !strings.Contains(results[0].Transcript, "$ nix copy") || !strings.Contains(results[0].Error, "derivation") {
+		t.Fatalf("expected copy's derivation error: %+v", results)
+	}
+}
+
+func TestIFDBuildsOnlyAtCopy(t *testing.T) {
+	f := newFixture(t)
+	results := RunLoop(context.Background(), f.config(), f.repo(), []string{f.entry("ifd")}, false)
+	result := results[0]
+	if result.Status != "succeeded" || result.CacheHit || !strings.Contains(result.Transcript, "allow-import-from-derivation' is disabled") {
+		t.Fatalf("expected failed IFD evaluation followed by successful copy: %+v", result)
+	}
+	nix(t, "path-info", "--store", f.store, f.out(t, "ifd"))
+}
+
+func TestMultiOutputPublishesDefaultOnly(t *testing.T) {
+	f := newFixture(t)
+	results := RunLoop(context.Background(), f.config(), f.repo(), []string{f.entry("multi")}, false)
+	if results[0].Status != "succeeded" {
+		t.Fatalf("publish: %+v", results)
+	}
+	nix(t, "path-info", "--store", f.store, f.out(t, "multi"))
+	nixFails(t, "path-info", "--store", f.store, f.out(t, "multi.dev"))
+}
+
+func TestRepairRequiresDeletingNarinfo(t *testing.T) {
+	f := newFixture(t)
+	publish := func(force bool) Result {
+		r := RunLoop(context.Background(), f.config(), f.repo(), []string{f.entry("hello")}, force)[0]
+		if r.Status != "succeeded" {
+			t.Fatalf("publish: %+v", r)
+		}
+		return r
+	}
+	publish(false)
+	out := f.out(t, "hello")
+	narinfo := strings.SplitN(filepath.Base(out), "-", 2)[0] + ".narinfo"
+	command(t, "", "mc", "rm", "local/"+f.bucket+"/"+narinfo)
+	if r := publish(false); r.CacheHit || r.Published != 1 {
+		t.Fatalf("missing narinfo must republish: %+v", r)
+	}
+	nix(t, "store", "verify", "--store", f.store, "--no-trust", out)
+	command(t, "", "mc", "rm", "--recursive", "--force", "local/"+f.bucket+"/nar/")
+	if r := publish(false); !r.CacheHit {
+		t.Fatalf("narinfo remains a cache hit: %+v", r)
+	}
+	if r := publish(true); r.CacheHit || r.Published != 0 {
+		t.Fatalf("copy cannot repair only a deleted nar: %+v", r)
+	}
+	nixFails(t, "store", "verify", "--store", f.store, "--no-trust", out)
+	command(t, "", "mc", "rm", "local/"+f.bucket+"/"+narinfo)
+	publish(true)
+	nix(t, "store", "verify", "--store", f.store, "--no-trust", out)
+}
+
+func TestMatchedNothingAndTimeout(t *testing.T) {
+	f := newFixture(t)
+	results := RunLoop(context.Background(), f.config(), f.repo(), []string{"selected." + f.system + ".absent*"}, false)
+	if len(results) != 1 || results[0].Status != "succeeded" || !results[0].MatchedNothing || results[0].CacheHit || results[0].Published != 0 {
+		t.Fatalf("expected matched nothing: %+v", results)
+	}
+	cfg := f.config()
+	cfg.JobTimeout = time.Second
+	started := time.Now()
+	results = RunLoop(context.Background(), cfg, f.repo(), []string{f.entry("slow")}, false)
+	if results[0].Status != "failed" || !strings.Contains(results[0].Error, "deadline exceeded") || time.Since(started) > 5*time.Second {
+		t.Fatalf("timeout did not bound the job: %+v", results)
 	}
 }

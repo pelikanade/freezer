@@ -6,8 +6,8 @@ The loop written in v0 is not scaffolding: those functions become the job runner
 
 ## Implementation evidence
 
-- Foundations and v0 acceptance 1–2: `devenv test` passed on 2026-10-10 (2 tests). Real S3 publication, positive probe, scratch-store substitution, content and signature verification. Current output: `.devenv/acceptance.log`.
-- Remaining: v0 acceptance 3–10, YAML/entry loading, v1 service and UI, and v2 packaging and real-host acceptance.
+- v0 complete: `devenv test` passed on 2026-10-10 (11 tests, 32.200 s). All ten v0 acceptance items run against real Nix/Git/S3, plus matched-nothing and timeout behavior. The exact-entry test loads both YAML files. Current output: `.devenv/acceptance.log`.
+- Remaining: v1 service and UI, and v2 packaging and real-host acceptance.
 
 ## v0 — the loop is real
 

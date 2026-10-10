@@ -2,7 +2,7 @@
 
 A self-hosted, webhook-driven build service for nix flakes. It publishes built store paths to a public, signed, S3-compatible binary cache (Cloudflare R2), so consumers substitute them instead of rebuilding.
 
-Status: implementing the rewrite. The real Nix/S3 loop now publishes exact entries and verifies substitution, hashes and signatures against a scratch store. The service and UI are still being implemented; progress and acceptance are in [ROADMAP.md](ROADMAP.md).
+Status: v0 implemented and verified. The real Nix/S3 loop covers all ten acceptance items; the service and UI are next. Progress and acceptance are in [ROADMAP.md](ROADMAP.md).
 
 ## Problem
 
@@ -72,6 +72,16 @@ The decided look is Clearlooks (GNOME 2 era) chrome as structure, not costume: o
 ## Development
 
 Run `devenv test` with the host Nix daemon available (Nix 2.34 is tested). It starts a loopback Silo S3 service, runs the end-to-end tests, and records current results in `.devenv/acceptance.log`. Tests use throwaway Git repositories, a locked static BusyBox fixture input, fresh signing keys and scratch Nix stores. The test bucket is cleared before each test. Do not point this environment at a production bucket.
+
+Repository build lists use one YAML document with an `entries` list:
+
+```yaml
+entries:
+  - packages.x86_64-linux.hello
+  - legacyPackages.x86_64-linux.my-tools-*
+```
+
+Only the final attribute component may contain a glob (`*`, `?`, or character classes). Quoted Nix attribute names are accepted; output selectors (`^dev`, `^*`) are not. Unknown YAML fields and invalid entries reject the build list before Nix runs. `glob_cap` defaults to 200 total glob matches per event; a pattern that would exceed the remaining allowance fails entirely. `job_timeout` defaults to `30m` and includes evaluation, probing and publication. The signing key is passed by filename to Nix and is never read by Freezer.
 
 ## Documents
 

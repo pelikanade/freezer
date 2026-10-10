@@ -3,10 +3,14 @@ package main
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"os"
 	"os/exec"
+	"path"
+	"regexp"
+	"strconv"
 	"strings"
 	"sync"
 	"syscall"
@@ -73,11 +77,82 @@ func runNix(ctx context.Context, transcript io.Writer, args ...string) (string, 
 
 func RunLoop(ctx context.Context, cfg Config, flake string, entries []string, force bool) []Result {
 	results := make([]Result, 0, len(entries))
-	for _, entry := range entries {
-		results = append(results, RunJob(ctx, cfg, flake, entry, force))
+	for _, planned := range expandEntries(ctx, cfg, flake, entries) {
+		if planned.Status != "" {
+			results = append(results, planned)
+			continue
+		}
+		result := RunJob(ctx, cfg, flake, planned.Entry, force)
+		result.Transcript = planned.Transcript + result.Transcript
+		results = append(results, result)
 	}
 	return results
 }
+
+func expandEntries(ctx context.Context, cfg Config, flake string, entries []string) []Result {
+	var jobs []Result
+	expanded := 0
+	for _, entry := range entries {
+		prefix, pattern, glob, parseErr := parseEntry(entry)
+		result := Result{Entry: entry, Status: "failed"}
+		if parseErr != nil {
+			result.Error = parseErr.Error()
+			jobs = append(jobs, result)
+			continue
+		}
+		if !glob {
+			jobs = append(jobs, Result{Entry: entry})
+			continue
+		}
+		jobCtx, cancel := context.WithTimeout(ctx, cfg.JobTimeout)
+		var transcript bytes.Buffer
+		output, err := runNix(jobCtx, &transcript, "eval", "--json", flake+"#"+prefix, "--apply", "builtins.attrNames", "--option", "allow-import-from-derivation", "false")
+		cancel()
+		var names []string
+		if err == nil {
+			err = json.Unmarshal([]byte(output), &names)
+		}
+		if err != nil {
+			result.Error = fmt.Sprintf("glob expansion: %v\n%s", err, transcript.String())
+			result.Transcript = transcript.String()
+			jobs = append(jobs, result)
+			continue
+		}
+		var matched []Result
+		for _, name := range names {
+			match, matchErr := path.Match(pattern, name)
+			if matchErr != nil {
+				err = matchErr
+				break
+			}
+			if match {
+				if expanded+len(matched) >= cfg.GlobCap {
+					err = fmt.Errorf("glob exceeds per-event cap of %d", cfg.GlobCap)
+					break
+				}
+				matched = append(matched, Result{Entry: prefix + "." + strconv.Quote(name), Transcript: transcript.String()})
+			}
+		}
+		if err != nil {
+			result.Error = err.Error()
+			result.Transcript = transcript.String()
+			jobs = append(jobs, result)
+			continue
+		}
+		expanded += len(matched)
+		if len(matched) == 0 {
+			result.Status = "succeeded"
+			result.MatchedNothing = true
+			result.Transcript = transcript.String() + "\nThe glob matched nothing.\n"
+			jobs = append(jobs, result)
+		} else {
+			jobs = append(jobs, matched...)
+		}
+	}
+	return jobs
+}
+
+var copiedPaths = regexp.MustCompile(`(?m)^copying ([0-9]+) paths`)
 
 func RunJob(ctx context.Context, cfg Config, flake, entry string, force bool) Result {
 	ctx, cancel := context.WithTimeout(ctx, cfg.JobTimeout)
@@ -92,12 +167,20 @@ func RunJob(ctx context.Context, cfg Config, flake, entry string, force bool) Re
 			return result
 		}
 	}
+	copyStart := transcript.Len()
 	_, err = runNix(ctx, &transcript, "copy", "--to", cfg.Cache.StoreURL(), flake+"#"+entry)
 	if err != nil {
 		result.Status = "failed"
-		result.Error = fmt.Sprintf("nix copy: %v", err)
-	} else {
-		result.Published = 1
+		detail := transcript.Bytes()[copyStart:]
+		if len(detail) > 4096 {
+			detail = detail[len(detail)-4096:]
+		}
+		result.Error = fmt.Sprintf("nix copy: %v\n%s", err, strings.TrimSpace(string(detail)))
+		if ctx.Err() == context.Canceled {
+			result.Status = "stopped"
+		}
+	} else if match := copiedPaths.FindSubmatch(transcript.Bytes()[copyStart:]); match != nil {
+		result.Published, _ = strconv.Atoi(string(match[1]))
 	}
 	result.Transcript = transcript.String()
 	return result

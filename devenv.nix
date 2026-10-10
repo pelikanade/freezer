@@ -24,6 +24,6 @@
   };
 
   enterTest = ''
-    go test -v -count=1 -timeout=15m ./... | tee .devenv/acceptance.log
+    go test -v -count=1 -timeout=15m ./... 2>&1 | tee .devenv/acceptance.log
   '';
 }

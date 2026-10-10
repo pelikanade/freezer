@@ -12,7 +12,7 @@
       "$tool" mkdir -p "$out"
       printf 'freezer fixture: %s\n' '${name}' > "$out/message"
     '';
-    generated = make "freezer-expression" ''
+    generated = make "freezer-expression-@nonce@" ''
       printf '"IFD evaluated"' > "$out"
     '';
   in {
