@@ -461,3 +461,76 @@ func TestMissingBuildListFailsWithoutJobs(t *testing.T) {
 		t.Fatalf("missing build list created a job: %d", code)
 	}
 }
+
+func TestFullTranscriptSurvivesHTMLTruncation(t *testing.T) {
+	s := newService(t, "packages.@system@.verbose")
+	s.push(t, "refs/heads/trunk", "fixture-secret")
+	s.nextStatus(t, "pending")
+	s.nextStatus(t, "failure")
+	code, transcript := s.get(t, "/jobs/1/log")
+	if code != 200 || !strings.Contains(transcript, "transcript-line-1\n") || !strings.Contains(transcript, "transcript-line-2105") {
+		t.Fatalf("build output was lost: %d %s", code, transcript)
+	}
+	_, page := s.get(t, "/jobs/1")
+	if !strings.Contains(page, "Showing the last 2000 of") || strings.Count(page, `data-line="`) != 2000 || !strings.Contains(page, "transcript-line-2105") || strings.Contains(page, "transcript-line-1</span>") {
+		t.Fatalf("HTML truncation did not preserve the final 2000 lines: %s", page)
+	}
+	s.stop(t)
+	s.start(t)
+	_, after := s.get(t, "/jobs/1/log")
+	if after != transcript {
+		t.Fatal("restart changed the full transcript")
+	}
+}
+
+func TestJobPagesPreserveContiguousGroups(t *testing.T) {
+	entries := make([]string, 51)
+	for i := range entries {
+		entries[i] = "selected.@system@.absent*"
+	}
+	s := newService(t, entries...)
+	s.build(t)
+	_, page := s.get(t, "/")
+	if !strings.Contains(page, `rowspan="50"`) || !strings.Contains(page, `href="/?before=2"`) {
+		t.Fatalf("first job page lost grouping or cursor: %s", page)
+	}
+	_, older := s.get(t, "/?before=2")
+	if !strings.Contains(older, `href="/jobs/1"`) || strings.Contains(older, `href="/jobs/2"`) || !strings.Contains(older, `href="/?after=1"`) {
+		t.Fatalf("older page contains wrong jobs: %s", older)
+	}
+	_, newer := s.get(t, "/?after=1")
+	if !strings.Contains(newer, `rowspan="50"`) || !strings.Contains(newer, `href="/jobs/51"`) {
+		t.Fatalf("Newer did not recover the first page: %s", newer)
+	}
+}
+
+func TestGlobalCapAndStopPreventLaterJobs(t *testing.T) {
+	s := newService(t, "packages.@system@.slow", "packages.@system@.hello")
+	s.stop(t)
+	data, err := os.ReadFile(s.configPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	data = bytes.ReplaceAll(data, []byte("global_build_cap: 2"), []byte("global_build_cap: 1"))
+	if err := os.WriteFile(s.configPath, data, 0600); err != nil {
+		t.Fatal(err)
+	}
+	s.start(t)
+	s.push(t, "refs/heads/trunk", "fixture-secret")
+	s.nextStatus(t, "pending")
+	s.waitPage(t, "/jobs/1/log", "$ nix copy")
+	if code, _ := s.get(t, "/jobs/2"); code != 404 {
+		t.Fatalf("global cap did not hold: %d", code)
+	}
+	s.post(t, "/jobs/1/stop", "/jobs/1?notice=stop")
+	s.nextStatus(t, "error")
+	s.idle(t)
+	if code, _ := s.get(t, "/jobs/2"); code != 404 {
+		t.Fatalf("Stop allowed a later job: %d", code)
+	}
+	s.setEntries(t, s.entry("hello"))
+	s.build(t)
+	if code, _ := s.get(t, "/jobs/2"); code != 200 {
+		t.Fatalf("Stop leaked the global build slot: %d", code)
+	}
+}

@@ -2,7 +2,7 @@
 
 A self-hosted, webhook-driven build service for nix flakes. It publishes built store paths to a public, signed, S3-compatible binary cache (Cloudflare R2), so consumers substitute them instead of rebuilding.
 
-Status: v0 and the v1 service acceptance are implemented and verified. The Clearlooks UI is functional and undergoing its complete browser acceptance; packaging and real-host deployment follow. Progress and acceptance are in [ROADMAP.md](ROADMAP.md).
+Status: v0 and v1 implemented and verified, including the Clearlooks UI. Packaging, retention and real-host deployment follow. Progress and acceptance are in [ROADMAP.md](ROADMAP.md).
 
 ## Problem
 

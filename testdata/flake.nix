@@ -44,6 +44,15 @@
         echo 'error: fixture cannot build' >&2
         exit 1
       '';
+      verbose = make "freezer-verbose-@nonce@" ''
+        i=1
+        while [ "$i" -le 2105 ]; do
+          printf 'transcript-line-%s\n' "$i"
+          i=$((i + 1))
+        done
+        echo 'error: verbose fixture failed' >&2
+        exit 1
+      '';
       notDerivation = 42;
     };
     selected.${system} = {

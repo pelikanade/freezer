@@ -289,3 +289,11 @@ Primary: CSS-only — wrap the transcript in a flex column-reverse scroller so t
 2. Icons as original SVGs in the Tango palette — do not vendor icon theme files.
 3. Open the mock while implementing: `docs/design/prototypes/freezer-clearlooks.html` (static HTML; fake data is fine).
 4. Detect matched-nothing as succeeded with no cache hit, zero paths, and a transcript that says the glob matched nothing (or store a flag later); do not invent a new persisted status without an ADR.
+
+## 10. Implementation verification (2026-10-10)
+
+The production templates and stylesheet are in `web/`, embedded in the binary. All seventeen acceptance items were exercised against the running service at desktop (1280×800) and mobile (390×844) sizes. The real build fixtures produced succeeded, failed, cache-hit, matched-nothing, running, stopped and interrupted jobs. The crash-before-first-transcript empty-well case used a constructed persisted running row, then the real restart recovery path.
+
+Browser measurements: body contrast 10.72:1, link 8.78:1, muted 6.19:1 (6.59:1 on stripes), button border 3.07:1; keyboard focus has a 2px ring. Mobile views had no page-level horizontal overflow. Build now and paging worked with JavaScript disabled. The failed job's 2000-line transcript viewport initially showed its final line; plain text retained the entire 2105-line build and command output.
+
+`devenv test` also covers 303 action redirects, status-specific copy, full transcript persistence through restart, HTML truncation, and keyset paging with within-page grouping. Nix publication uses `--print-build-logs` so the stored transcript includes complete build output. Local browser evidence and screenshots are linked from `.project-map/` and remain untracked.

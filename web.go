@@ -135,7 +135,8 @@ func resultSummary(r Result) string {
 	case "interrupted":
 		return "freezer restarted mid-build"
 	default:
-		return r.Error
+		summary, _, _ := strings.Cut(r.Error, "\n")
+		return summary
 	}
 }
 

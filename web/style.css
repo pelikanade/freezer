@@ -293,7 +293,7 @@ body { min-height:100vh; display:flex; flex-direction:column; }
 .tv table { table-layout:fixed; }
 .tv .entry, .tv .name, .repo-error { overflow-wrap:anywhere; }
 .tv .act { width:110px; }
-.tv .stc { width:135px; }
+.tv .stc { width:160px; }
 .tv .grp { width:145px; white-space:normal; overflow-wrap:anywhere; }
 .tv .when { width:155px; }
 .tv .num { width:90px; }
@@ -322,3 +322,5 @@ body { min-height:100vh; display:flex; flex-direction:column; }
  .statusbar > span { white-space:normal; }
  .textview .l { grid-template-columns:4.5ch minmax(0,1fr); }
 }
+.hero > div { min-width:0; flex:1; }
+.hero .sub { overflow-wrap:anywhere; }

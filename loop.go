@@ -175,14 +175,20 @@ func RunJob(ctx context.Context, cfg Config, flake, entry string, force bool, re
 		}
 	}
 	copyStart := transcript.Len()
-	_, err = runNix(ctx, stream, "copy", "--to", cfg.Cache.StoreURL(), flake+"#"+entry)
+	_, err = runNix(ctx, stream, "copy", "--to", cfg.Cache.StoreURL(), "--print-build-logs", flake+"#"+entry)
 	if err != nil {
 		result.Status = "failed"
 		detail := transcript.Bytes()[copyStart:]
-		if len(detail) > 4096 {
-			detail = detail[len(detail)-4096:]
+		if start := bytes.Index(detail, []byte("\nerror:")); start >= 0 {
+			detail = detail[start+1:]
+			if len(detail) > 4096 {
+				result.Error = strings.TrimSpace(string(detail[:4096])) + "\nSee the full transcript for the remaining error."
+			} else {
+				result.Error = strings.TrimSpace(string(detail))
+			}
+		} else {
+			result.Error = fmt.Sprintf("nix copy: %v", err)
 		}
-		result.Error = fmt.Sprintf("nix copy: %v\n%s", err, strings.TrimSpace(string(detail)))
 		if ctx.Err() == context.Canceled {
 			result.Status = "stopped"
 		}
