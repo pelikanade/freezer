@@ -139,3 +139,7 @@ These five checks are intentionally **not marked complete** by local tests. Fill
 | Real repair recipe succeeds | Waiting for a designated test object | Exact deleted keys, Build now job, and successful fresh-store substitution afterwards. |
 
 Local verification is tracked in [ROADMAP.md](../ROADMAP.md) and the owner's gitignored project map. It proves the implementation against Silo and a GitHub HTTP stand-in; it does not prove Cloudflare, a custom domain or the real GitHub token.
+
+The local self-hosting smoke also compiled a temporary clone of the final implementation through the packaged service, verified a documentation-only follow-up as a cache hit, and substituted the result into a fresh store with hash/signature checks. A comment in the temporary clone forced a new derivation; no product behavior was changed for the smoke. The service used its own HOME and did not inherit the developer's `XDG_CONFIG_HOME` Git filters, matching the module's separate-account environment. Raw transcripts and exact fixture revisions are retained in `.project-map/`.
+
+For hand-run flake and store commands, enable `nix-command` and `flakes` or pass `--extra-experimental-features 'nix-command flakes'`. Freezer supplies those features per invocation and leaves the host configuration alone.
