@@ -2,7 +2,7 @@
 
 A self-hosted, webhook-driven build service for nix flakes. It publishes built store paths to a public, signed, S3-compatible binary cache (Cloudflare R2), so consumers substitute them instead of rebuilding.
 
-Status: v0 implemented and verified. The real Nix/S3 loop covers all ten acceptance items; the service and UI are next. Progress and acceptance are in [ROADMAP.md](ROADMAP.md).
+Status: v0 and the v1 service acceptance are implemented and verified. The Clearlooks UI is functional and undergoing its complete browser acceptance; packaging and real-host deployment follow. Progress and acceptance are in [ROADMAP.md](ROADMAP.md).
 
 ## Problem
 
@@ -82,6 +82,33 @@ entries:
 ```
 
 Only the final attribute component may contain a glob (`*`, `?`, or character classes). Quoted Nix attribute names are accepted; output selectors (`^dev`, `^*`) are not. Unknown YAML fields and invalid entries reject the build list before Nix runs. `glob_cap` defaults to 200 total glob matches per event; a pattern that would exceed the remaining allowance fails entirely. `job_timeout` defaults to `30m` and includes evaluation, probing and publication. The signing key is passed by filename to Nix and is never read by Freezer.
+
+## Running the service
+
+Build with `devenv shell -- go build -o .devenv/freezer .`, then run `.devenv/freezer /path/to/server.yaml`. The binary has one mode and takes only the configuration filename. Bind to localhost behind an authenticated reverse proxy or SSH tunnel. Expose only `/hooks/<name>` to GitHub, configured for push events and the matching per-repository secret.
+
+```yaml
+listen: 127.0.0.1:8080
+state_dir: /var/lib/freezer
+global_build_cap: 2
+glob_cap: 200
+job_timeout: 30m
+retention: 1000
+public_url: https://freezer.example.com
+cache:
+  bucket: public-nix-cache
+  endpoint: https://ACCOUNT_ID.r2.cloudflarestorage.com
+  signing_key: /run/secrets/freezer-signing-key
+repositories:
+  - name: personal-flake
+    url: https://github.com/OWNER/REPOSITORY.git
+    github: OWNER/REPOSITORY
+    webhook_secret: REPLACE_WITH_A_RANDOM_SECRET
+```
+
+Set `GITHUB_TOKEN` (or the private config's `github_token`) to a shared token allowed to create commit statuses. Nix reads `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY` from the environment. Keep the server config private: it holds webhook secrets. Register public repositories only; all published outputs are public. `github_api_base` defaults to `https://api.github.com` and exists as the network test seam.
+
+State lives in `state_dir/freezer.sqlite`; persistent checkouts live under `state_dir/checkouts/`. Restarting loses queued events and marks running jobs interrupted, retaining the transcript already recorded. Build now and Stop are HTML form actions. Job history, paging and full plain-text transcripts require no JavaScript. The last-built commit survives a restart.
 
 ## Documents
 

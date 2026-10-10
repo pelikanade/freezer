@@ -16,9 +16,24 @@ import (
 )
 
 type Config struct {
-	Cache      CacheConfig   `yaml:"cache"`
-	GlobCap    int           `yaml:"glob_cap"`
-	JobTimeout time.Duration `yaml:"job_timeout"`
+	Cache          CacheConfig   `yaml:"cache"`
+	GlobCap        int           `yaml:"glob_cap"`
+	JobTimeout     time.Duration `yaml:"job_timeout"`
+	Listen         string        `yaml:"listen"`
+	StateDir       string        `yaml:"state_dir"`
+	GlobalBuildCap int           `yaml:"global_build_cap"`
+	Retention      int           `yaml:"retention"`
+	GitHubAPIBase  string        `yaml:"github_api_base"`
+	GitHubToken    string        `yaml:"github_token"`
+	PublicURL      string        `yaml:"public_url"`
+	Repositories   []Repository  `yaml:"repositories"`
+}
+
+type Repository struct {
+	Name          string `yaml:"name"`
+	URL           string `yaml:"url"`
+	GitHub        string `yaml:"github"`
+	WebhookSecret string `yaml:"webhook_secret"`
 }
 
 type CacheConfig struct {
@@ -54,7 +69,7 @@ func decodeYAML(filename string, value any) error {
 }
 
 func LoadConfig(filename string) (Config, error) {
-	cfg := Config{GlobCap: 200, JobTimeout: 30 * time.Minute}
+	cfg := Config{GlobCap: 200, JobTimeout: 30 * time.Minute, Listen: "127.0.0.1:8080", StateDir: "state", GlobalBuildCap: 2, Retention: 1000, GitHubAPIBase: "https://api.github.com"}
 	if err := decodeYAML(filename, &cfg); err != nil {
 		return cfg, err
 	}
@@ -77,8 +92,43 @@ func LoadConfig(filename string) (Config, error) {
 			return cfg, err
 		}
 	}
+	if !filepath.IsAbs(cfg.StateDir) {
+		cfg.StateDir, err = filepath.Abs(filepath.Join(filepath.Dir(filename), cfg.StateDir))
+		if err != nil {
+			return cfg, err
+		}
+	}
+	if cfg.GitHubToken == "" {
+		cfg.GitHubToken = os.Getenv("GITHUB_TOKEN")
+	}
+	cfg.GitHubAPIBase = strings.TrimRight(cfg.GitHubAPIBase, "/")
+	if cfg.GlobalBuildCap < 1 || cfg.Retention < 1 {
+		return cfg, fmt.Errorf("global_build_cap and retention must be positive")
+	}
+	for name, value := range map[string]string{"github_api_base": cfg.GitHubAPIBase, "public_url": cfg.PublicURL} {
+		if name == "public_url" && value == "" {
+			continue
+		}
+		u, e := url.Parse(value)
+		if e != nil || u.Host == "" || (u.Scheme != "http" && u.Scheme != "https") || u.User != nil || u.RawQuery != "" || u.Fragment != "" {
+			return cfg, fmt.Errorf("%s must be an HTTP(S) URL without credentials, query or fragment", name)
+		}
+	}
+	names := make(map[string]bool)
+	for _, repo := range cfg.Repositories {
+		if !repositoryName.MatchString(repo.Name) || names[repo.Name] {
+			return cfg, fmt.Errorf("repository names must be unique safe path components")
+		}
+		names[repo.Name] = true
+		if repo.URL == "" || !githubSlug.MatchString(repo.GitHub) || repo.WebhookSecret == "" {
+			return cfg, fmt.Errorf("repository %s requires url, github (owner/name) and webhook_secret", repo.Name)
+		}
+	}
 	return cfg, nil
 }
+
+var repositoryName = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_-]*$`)
+var githubSlug = regexp.MustCompile(`^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$`)
 
 func LoadBuildList(directory string) ([]string, error) {
 	filename := filepath.Join(directory, ".freezer.yaml")

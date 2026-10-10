@@ -50,6 +50,9 @@ func runCommand(ctx context.Context, transcript io.Writer, name string, args ...
 		return "", err
 	}
 	cmd := exec.CommandContext(ctx, name, args...)
+	if name == "git" {
+		cmd.Env = append(os.Environ(), "GIT_TERMINAL_PROMPT=0")
+	}
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 	cmd.Cancel = func() error {
 		err := syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
@@ -82,7 +85,7 @@ func RunLoop(ctx context.Context, cfg Config, flake string, entries []string, fo
 			results = append(results, planned)
 			continue
 		}
-		result := RunJob(ctx, cfg, flake, planned.Entry, force)
+		result := RunJob(ctx, cfg, flake, planned.Entry, force, nil)
 		result.Transcript = planned.Transcript + result.Transcript
 		results = append(results, result)
 	}
@@ -154,21 +157,25 @@ func expandEntries(ctx context.Context, cfg Config, flake string, entries []stri
 
 var copiedPaths = regexp.MustCompile(`(?m)^copying ([0-9]+) paths`)
 
-func RunJob(ctx context.Context, cfg Config, flake, entry string, force bool) Result {
+func RunJob(ctx context.Context, cfg Config, flake, entry string, force bool, record io.Writer) Result {
 	ctx, cancel := context.WithTimeout(ctx, cfg.JobTimeout)
 	defer cancel()
 	result := Result{Entry: entry, Status: "succeeded"}
 	var transcript bytes.Buffer
-	out, err := runNix(ctx, &transcript, "eval", "--raw", flake+"#"+entry+".outPath", "--option", "allow-import-from-derivation", "false")
+	var stream io.Writer = &transcript
+	if record != nil {
+		stream = io.MultiWriter(&transcript, record)
+	}
+	out, err := runNix(ctx, stream, "eval", "--raw", flake+"#"+entry+".outPath", "--option", "allow-import-from-derivation", "false")
 	if err == nil && !force {
-		if _, err = runNix(ctx, &transcript, "path-info", "--store", cfg.Cache.StoreURL(), out); err == nil {
+		if _, err = runNix(ctx, stream, "path-info", "--store", cfg.Cache.StoreURL(), out); err == nil {
 			result.CacheHit = true
 			result.Transcript = transcript.String()
 			return result
 		}
 	}
 	copyStart := transcript.Len()
-	_, err = runNix(ctx, &transcript, "copy", "--to", cfg.Cache.StoreURL(), flake+"#"+entry)
+	_, err = runNix(ctx, stream, "copy", "--to", cfg.Cache.StoreURL(), flake+"#"+entry)
 	if err != nil {
 		result.Status = "failed"
 		detail := transcript.Bytes()[copyStart:]
