@@ -2,7 +2,7 @@
 
 A self-hosted, webhook-driven build service for nix flakes. It publishes built store paths to a public, signed, S3-compatible binary cache (Cloudflare R2), so consumers substitute them instead of rebuilding.
 
-Status: v0 and v1 implemented and verified, including the Clearlooks UI. Packaging, retention and real-host deployment follow. Progress and acceptance are in [ROADMAP.md](ROADMAP.md).
+Status: v0, v1 and retention implemented and verified. Flake packaging and real-host deployment follow. Progress and acceptance are in [ROADMAP.md](ROADMAP.md).
 
 ## Problem
 
@@ -109,6 +109,8 @@ repositories:
 Set `GITHUB_TOKEN` (or the private config's `github_token`) to a shared token allowed to create commit statuses. Nix reads `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY` from the environment. Keep the server config private: it holds webhook secrets. Register public repositories only; all published outputs are public. `github_api_base` defaults to `https://api.github.com` and exists as the network test seam.
 
 State lives in `state_dir/freezer.sqlite`; persistent checkouts live under `state_dir/checkouts/`. Restarting loses queued events and marks running jobs interrupted, retaining the transcript already recorded. Build now and Stop are HTML form actions. Job history, paging and full plain-text transcripts require no JavaScript. The last-built commit survives a restart.
+
+`retention` keeps the newest N jobs per repository (default 1000). It runs at startup and after each event; old job rows and their transcripts are deleted together. Running jobs are protected. Per-repository last-built state is independent of retained history. SQLite does not shrink the database file automatically; reclaiming space with `VACUUM` remains an admin operation.
 
 ## Documents
 

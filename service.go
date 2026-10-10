@@ -61,6 +61,17 @@ func NewServer(cfg Config) (*Server, error) {
 		}
 		s.repos[repo.Name] = &repositoryRun{repository: repo, wake: make(chan struct{}, 1)}
 	}
+	var recordedRepos []string
+	if err := db.Model(&Job{}).Distinct("repo").Pluck("repo", &recordedRepos).Error; err != nil {
+		s.Close()
+		return nil, err
+	}
+	for _, name := range recordedRepos {
+		if err := pruneHistory(db, name, cfg.Retention); err != nil {
+			s.Close()
+			return nil, err
+		}
+	}
 	for _, repo := range s.repos {
 		s.wg.Add(1)
 		go s.runRepository(repo)
@@ -108,6 +119,11 @@ func (s *Server) runRepository(repo *repositoryRun) {
 			s.mu.Unlock()
 			s.runEvent(ctx, repo, event)
 			cancel()
+			if s.ctx.Err() == nil {
+				if err := pruneHistory(s.db, repo.repository.Name, s.cfg.Retention); err != nil {
+					log.Printf("retention for %s: %v", repo.repository.Name, err)
+				}
+			}
 			s.mu.Lock()
 			repo.active = false
 			repo.cancel = nil

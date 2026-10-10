@@ -72,3 +72,8 @@ func (w transcriptWriter) Write(p []byte) (int, error) {
 	}
 	return len(p), nil
 }
+
+func pruneHistory(db *gorm.DB, repo string, keep int) error {
+	newest := db.Model(&Job{}).Select("id").Where("repo = ?", repo).Order("id DESC").Limit(keep)
+	return db.Where("repo = ? AND status <> ? AND id NOT IN (?)", repo, "running", newest).Delete(&Job{}).Error
+}

@@ -534,3 +534,73 @@ func TestGlobalCapAndStopPreventLaterJobs(t *testing.T) {
 		t.Fatalf("Stop leaked the global build slot: %d", code)
 	}
 }
+
+func TestRetentionDeletesJobsAndTranscripts(t *testing.T) {
+	s := newService(t)
+	s.build(t)
+	s.setEntries(t, s.entry("second"))
+	s.build(t)
+	s.setEntries(t, s.entry("hello"))
+	s.build(t)
+	s.stop(t)
+	data, err := os.ReadFile(s.configPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	data = append(data, []byte("retention: 2\n")...)
+	if err := os.WriteFile(s.configPath, data, 0600); err != nil {
+		t.Fatal(err)
+	}
+	s.start(t)
+	for _, path := range []string{"/jobs/1", "/jobs/1/log"} {
+		if code, _ := s.get(t, path); code != 404 {
+			t.Fatalf("retention kept %s: %d", path, code)
+		}
+	}
+	for _, id := range []int{2, 3} {
+		if code, body := s.get(t, fmt.Sprintf("/jobs/%d/log", id)); code != 200 || body == "" {
+			t.Fatalf("retention removed recent transcript %d: %d", id, code)
+		}
+	}
+	s.setEntries(t, s.entry("second"))
+	s.build(t)
+	if code, _ := s.get(t, "/jobs/2/log"); code != 404 {
+		t.Fatalf("retention was not applied after an event: %d", code)
+	}
+	s.push(t, "refs/heads/trunk", "fixture-secret")
+	s.noStatus(t)
+}
+
+func TestRepositoriesBuildConcurrently(t *testing.T) {
+	s := newService(t, "packages.@system@.slow")
+	s.stop(t)
+	data, err := os.ReadFile(s.configPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	data = append(data, []byte(fmt.Sprintf("  - name: other\n    url: %s\n    github: owner/other\n    webhook_secret: other-secret\n", s.repo()))...)
+	if err := os.WriteFile(s.configPath, data, 0600); err != nil {
+		t.Fatal(err)
+	}
+	s.start(t)
+	s.post(t, "/build/demo", "/?notice=build&repo=demo")
+	s.nextStatus(t, "pending")
+	s.waitPage(t, "/jobs/1/log", "$ nix copy")
+	s.post(t, "/build/other", "/?notice=build&repo=other")
+	s.nextStatus(t, "pending")
+	s.waitPage(t, "/jobs/2/log", "$ nix copy")
+	for _, id := range []int{1, 2} {
+		_, page := s.get(t, fmt.Sprintf("/jobs/%d", id))
+		if !strings.Contains(page, `class="running-box"`) {
+			t.Fatalf("repository did not run concurrently: %s", page)
+		}
+	}
+	s.post(t, "/jobs/1/stop", "/jobs/1?notice=stop")
+	s.nextStatus(t, "error")
+	_, other := s.get(t, "/jobs/2")
+	if !strings.Contains(other, `class="running-box"`) {
+		t.Fatalf("stopping one repository stopped another: %s", other)
+	}
+	s.post(t, "/jobs/2/stop", "/jobs/2?notice=stop")
+	s.nextStatus(t, "error")
+}

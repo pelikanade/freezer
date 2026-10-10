@@ -9,7 +9,8 @@ The loop written in v0 is not scaffolding: those functions become the job runner
 - v0 complete: `devenv test` passed on 2026-10-10 (11 tests, 32.200 s). All ten v0 acceptance items run against real Nix/Git/S3, plus matched-nothing and timeout behavior. The exact-entry test loads both YAML files. Current output: `.devenv/acceptance.log`.
 - v1 service complete: all eleven HTTP acceptance items passed on 2026-10-10, plus interrupted-transcript recovery and missing-build-list rejection (24 tests total, 64.478 s). Actual browser smoke exercised Build now against the built binary and S3, producing succeeded, failed and matched-nothing jobs.
 - v1 UI complete: all seventeen UI acceptance items exercised in Chromium at 1280×800 and 390×844, including no-JavaScript actions, paging, state-specific views, keyboard focus and measured contrast. Full regression: 27 tests passed in 80.316 s. Local screenshots and the item-by-item record live in `.project-map/ui-evidence.json`.
-- Remaining: v2 packaging, retention, runbook and real-host acceptance.
+- v2 retention implemented: HTTP acceptance passed (5.238 s), and an actual service restart with `retention: 2` removed job 59 and its transcript from a 61-job fixture while jobs 60–61 remained readable. This is local evidence, not real-host v2 acceptance.
+- Remaining: flake package, NixOS module, runbook and all five real-host acceptance items.
 
 ## v0 — the loop is real
 
