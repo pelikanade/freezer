@@ -3,8 +3,6 @@ package main
 import (
 	"bytes"
 	"context"
-	"crypto/hmac"
-	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -21,10 +19,12 @@ import (
 	"gorm.io/gorm"
 )
 
+// BuildEvent is a request to build a repository's current default-branch head.
+// Force marks Build now, which skips the last-built check and the probe; the
+// index page shows a waiting event's age, so the time it was raised is kept.
 type BuildEvent struct {
-	Force        bool
-	ReceivedAt   time.Time
-	PushedCommit string
+	Force      bool
+	ReceivedAt time.Time
 }
 type repositoryRun struct {
 	repository Repository
@@ -76,7 +76,30 @@ func NewServer(cfg Config) (*Server, error) {
 		s.wg.Add(1)
 		go s.runRepository(repo)
 	}
+	if cfg.PollInterval > 0 {
+		s.wg.Add(1)
+		go s.pollRepositories()
+	}
 	return s, nil
+}
+
+// pollRepositories resolves every registered repository's default-branch head on
+// the configured interval, starting at once, so a deployment GitHub cannot reach
+// still builds pushes. Nothing else changes: an unchanged head stops at the
+// last-built check without touching the commit status, and a changed one runs
+// exactly the event a delivered push would have started.
+func (s *Server) pollRepositories() {
+	defer s.wg.Done()
+	for {
+		for _, repo := range s.repos {
+			s.enqueue(repo, BuildEvent{ReceivedAt: time.Now().UTC()})
+		}
+		select {
+		case <-s.ctx.Done():
+			return
+		case <-time.After(s.cfg.PollInterval):
+		}
+	}
 }
 
 func (s *Server) Close() {
@@ -87,9 +110,16 @@ func (s *Server) Close() {
 	}
 }
 
+// enqueue puts an event in the repository's queue, where a newer event replaces
+// the waiting one — except that a non-forced event never displaces a waiting
+// Build now. A poll tick must not turn the repair path into an ordinary event,
+// and Build now resolves the branch head when it runs anyway, so it covers the
+// push that would have replaced it.
 func (s *Server) enqueue(repo *repositoryRun, event BuildEvent) {
 	s.mu.Lock()
-	repo.queued = &event
+	if repo.queued == nil || event.Force || !repo.queued.Force {
+		repo.queued = &event
+	}
 	s.mu.Unlock()
 	select {
 	case repo.wake <- struct{}{}:
@@ -205,12 +235,27 @@ func (s *Server) runEvent(ctx context.Context, repo *repositoryRun, event BuildE
 		return
 	}
 	planned := expandEntries(ctx, s.cfg, checkout, entries)
+	// Every planned entry gets a record before anything runs. The UI is the only
+	// control surface, so an entry that is planned but still waiting for a global
+	// build slot has to be visible while the event runs, instead of appearing only
+	// when it starts (ADR 0025).
+	jobs := make([]Job, len(planned))
+	for i, plan := range planned {
+		job := Job{Repo: repo.repository.Name, Commit: commit, Result: Result{Entry: plan.Entry, Status: "planned", Transcript: plan.Transcript}}
+		if err := s.db.Create(&job).Error; err != nil {
+			s.recordResult(repo.repository.Name, "failure", "could not record the event's jobs: "+err.Error(), "")
+			s.report(repo.repository, commit, "failure", "Could not record the event's jobs")
+			return
+		}
+		jobs[i] = job
+	}
 	var workers sync.WaitGroup
 	var resultMu sync.Mutex
 	failed := 0
 	eventError := ""
 schedule:
-	for _, plan := range planned {
+	for i, job := range jobs {
+		plan := planned[i]
 		select {
 		case <-ctx.Done():
 			break schedule
@@ -222,9 +267,13 @@ schedule:
 			<-s.slots
 			break
 		}
-		job := Job{Repo: repo.repository.Name, Commit: commit, Result: Result{Entry: plan.Entry, Status: "running", Transcript: plan.Transcript}, StartedAt: time.Now().UTC()}
-		err := s.db.Create(&job).Error
+		started := time.Now().UTC()
+		err := s.db.Model(&Job{}).Where("id = ?", job.ID).Updates(map[string]any{"status": "running", "started_at": started}).Error
 		if err == nil {
+			jobs[i].Result.Status = "running"
+			jobs[i].StartedAt = started
+			job.Result.Status = "running"
+			job.StartedAt = started
 			s.activeJobs[job.ID] = repo
 		}
 		s.mu.Unlock()
@@ -265,6 +314,17 @@ schedule:
 		}(job, plan)
 	}
 	workers.Wait()
+	// An event can end with work still unstarted: the operator stopped it, or a
+	// recording step failed. Those jobs never ran, so they say so instead of
+	// sitting in the list as planned forever.
+	for _, job := range jobs {
+		if job.Result.Status != "planned" {
+			continue
+		}
+		if err := s.db.Model(&Job{}).Where("id = ?", job.ID).Updates(map[string]any{"status": "stopped", "error": "The event ended before this job started."}).Error; err != nil {
+			log.Printf("close unstarted job %d: %v", job.ID, err)
+		}
+	}
 	if s.ctx.Err() != nil {
 		return
 	}
@@ -323,53 +383,6 @@ func (s *Server) report(repo Repository, commit, state, description string) {
 		log.Printf("commit status %s/%s: %v", repo.Name, commit, err)
 		s.db.Model(&RepositoryState{}).Where("name = ?", repo.Name).Update("last_error", "Commit status delivery failed: "+err.Error())
 	}
-}
-
-func (s *Server) webhook(w http.ResponseWriter, r *http.Request) {
-	repo := s.repos[r.PathValue("repo")]
-	if repo == nil {
-		s.errorPage(w, r, 404, "Repository not registered", "Register it in the server configuration.")
-		return
-	}
-	body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, 25<<20))
-	if err != nil {
-		s.errorPage(w, r, 400, "Invalid webhook body", err.Error())
-		return
-	}
-	signature, err := hex.DecodeString(strings.TrimPrefix(r.Header.Get("X-Hub-Signature-256"), "sha256="))
-	mac := hmac.New(sha256.New, []byte(repo.repository.WebhookSecret))
-	mac.Write(body)
-	if err != nil || !strings.HasPrefix(r.Header.Get("X-Hub-Signature-256"), "sha256=") || !hmac.Equal(signature, mac.Sum(nil)) {
-		s.errorPage(w, r, 401, "Invalid webhook signature", "Check the repository webhook secret.")
-		return
-	}
-	if r.Header.Get("X-GitHub-Event") != "push" {
-		w.WriteHeader(http.StatusNoContent)
-		return
-	}
-	var event struct {
-		Ref, After string
-		Deleted    bool
-	}
-	if err := json.Unmarshal(body, &event); err != nil || event.Ref == "" {
-		s.errorPage(w, r, 400, "Invalid push payload", "A push must declare its ref.")
-		return
-	}
-	if event.Deleted {
-		w.WriteHeader(http.StatusNoContent)
-		return
-	}
-	branch, _, err := resolveHead(r.Context(), repo.repository)
-	if err != nil {
-		s.errorPage(w, r, 502, "Default branch unavailable", err.Error())
-		return
-	}
-	if event.Ref != branch {
-		w.WriteHeader(http.StatusNoContent)
-		return
-	}
-	s.enqueue(repo, BuildEvent{ReceivedAt: time.Now().UTC(), PushedCommit: event.After})
-	w.WriteHeader(http.StatusAccepted)
 }
 
 func (s *Server) buildNow(w http.ResponseWriter, r *http.Request) {

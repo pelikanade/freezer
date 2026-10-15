@@ -1,41 +1,52 @@
 # Operating Freezer
 
-Freezer publishes trusted, public Nix store paths. Register only public repositories whose default-branch code you trust. The web UI has no authentication: protect it with the reverse proxy or bind to localhost and use an SSH tunnel. Only the signed webhook route needs public access.
+Freezer publishes trusted, public Nix store paths. Register only public repositories whose default-branch code you trust. The web UI has no authentication: protect it with the reverse proxy or bind to localhost and use an SSH tunnel. Nothing needs to be reachable from outside: triggering is polling (ADR 0024), so the whole service can stay on a private network.
 
-## Install with NixOS
+## Deploy as a container
 
-The flake exposes `packages.<system>.default`, `packages.<system>.freezer` and `nixosModules.default` for x86_64-linux and aarch64-linux. Build locally with `nix build`; `devenv test` runs the real Nix/Git/S3 acceptance suite. The package is a static Go executable with its templates and stylesheet embedded.
+One container under rootless Podman, with no Nix on the host. The image is built from the `Dockerfile` in the repository root: its first stage compiles the Go package with the official Go image, and the result runs on the official Nix image (`nixos/nix:2.34.8`), which ships Nix 2.34.8, git, tar and curl on `PATH` — everything Freezer shells out to. Building the image runs no Nix. The service drives the Nix *inside* the container, so builds, probing and publication all happen there and the host's Nix daemon is never used. (`devenv test` is the development acceptance suite and still needs the host daemon.)
 
-Add Freezer as a flake input and import its module:
-
-```nix
-{
-  inputs.freezer.url = "github:pelikanade/freezer";
-
-  outputs = { nixpkgs, freezer, ... }: {
-    nixosConfigurations.build-host = nixpkgs.lib.nixosSystem {
-      system = "x86_64-linux";
-      modules = [
-        ./configuration.nix
-        freezer.nixosModules.default
-        {
-          services.freezer = {
-            enable = true;
-            configFile = "/run/secrets/freezer-config.yaml";
-            environmentFile = "/run/secrets/freezer-environment";
-          };
-        }
-      ];
-    };
-  };
-}
+```sh
+podman build -t freezer:0.1.0 .
 ```
 
-These secret paths are strings, not Nix path literals. Provision their contents through the host's existing secret-management mechanism. The module does not copy secret files into the Nix store, create credentials, open firewall ports, configure a reverse proxy, or add the service user to Nix's trusted-users.
+Everything the service writes lives under the deploying user's home, and the container runs as that user. Prepare the deployment directory and bring the project up:
 
-The module runs as `freezer:freezer`, creates `/var/lib/freezer` with mode 0700, sets HOME and the Nix client cache there, and supplies git plus the host's `config.nix.package` on PATH. It uses a private temporary directory and a read-only system view; state remains writable. Put signing keys and configuration under `/run/secrets` or `/var/lib/freezer`, not under a user's home. Set `state_dir: /var/lib/freezer` in the YAML. A stopped service has ten seconds to exit; jobs still marked running are recovered as interrupted at the next start.
+```sh
+mkdir -p ~/freezer/state
+cp deploy/freezer.example.yaml ~/freezer/freezer.yaml   # bucket, endpoint, repositories
+install -m 600 deploy/.env.example ~/freezer/.env       # then edit: GITHUB_TOKEN and the R2 credentials
+chmod 600 ~/freezer/freezer.yaml
+cp deploy/compose.yaml ~/freezer/compose.yaml
+podman run --rm --entrypoint nix-store -v "$HOME/freezer:/keys" freezer:0.1.0 \
+  --generate-binary-cache-key freezer-cache-1 /keys/signing.key /keys/signing.pub
+podman compose -f ~/freezer/compose.yaml up -d
+```
 
-Nix >= 2.33 is the design floor, with 2.34 tested. Use at least 2.33.6 when selecting the 2.33 series, since that is where the addressing-style option was backported. The module uses the host's Nix; Freezer does not validate or rewrite daemon settings. If the host rejects an option or a build, its Nix error is recorded in the job transcript.
+`deploy/compose.yaml` is the whole deployment, pinned in one file: the image tag, the loopback port, the three bind mounts, the environment file, the health check, `restart: always`, and the two sandbox settings below. Every path in it is relative, which is why the file belongs in `~/freezer/` beside the configuration, the key and the state directory. `docker compose` reads the same file.
+
+The configuration must set `listen: 0.0.0.0:8080` and `state_dir: /var/lib/freezer`, and must name the signing key where the container sees it — `/etc/freezer/signing.key`. Its keys are the ones in [README.md](../README.md#running-the-service); `deploy/freezer.example.yaml` is a working starting point. `~/freezer/signing.key` is the only copy of the private key: back it up, and hand only `signing.pub` to consumers.
+
+**Boot and crashes.** `restart: always` restarts the container whenever it dies, and a deliberate `podman compose stop` stays stopped. To bring it back after a reboot, enable the user unit that re-runs containers carrying a restart policy: `systemctl --user enable --now podman-restart.service`, together with lingering (`loginctl enable-linger "$USER"`, or `users.users.<name>.linger = true` on NixOS) so it runs without a login. On a host that enforces SELinux, add `,Z` to the three volume options in the compose file.
+
+**Triggering.** Polling only: `poll_interval` is required and positive. The service resolves every registered repository's default-branch head at start and on each interval afterwards, and builds whenever the head is not the commit last built. Nothing inbound is needed — no public route, no webhook, no reverse-proxy vhost — so the UI can stay on a private network or behind an SSH tunnel and the deployment can be unreachable from the internet. A poll that cannot reach the remote shows up as a failed repository state in the UI and posts no commit status. Ten minutes is a reasonable start; a poll costs one branch resolution per repository.
+
+**Runtime behavior.**
+
+- The container's Nix store is its writable layer: it survives stop, start and reboot of the same container, and is discarded when the container is recreated (a new image tag, or an edited compose file). R2 holds the published paths, so a discarded store costs rebuild time on the next push, never re-publication, and nothing else is lost. `state_dir` is the bind mount and does survive recreation.
+- Builds are sandboxed: the image sets `sandbox = true`, and the compose file hands the container the two things Nix's sandbox needs — `cap_add: [SYS_ADMIN]` and `security_opt: [unmask=ALL]`. **Neither is optional, and a stock container has neither.** Podman drops `CAP_SYS_ADMIN` from the container's capability set, so without it Nix cannot create the mount, PID and UTS namespaces a build runs in; and Nix probes the sandbox by *remounting `/proc`*, which the kernel refuses while Podman has paths masked inside it, so the probe fails on a default container even with the capability added. Both failures look identical — every build stops with "this system does not support the kernel namespaces that are required for sandboxing" — because `sandbox-fallback = false` is set in the image. That is the deliberate trade: loud, not silent. The escape hatch is a `nix.conf` mounted at `/etc/nix/nix.conf` with `sandbox = false`, and it is a poor one: without a sandbox, Nix requires `/homeless-shelter` — the `HOME` it gives builders — to not exist, and a builder that writes into its home directory creates it, after which *every later build in that container* fails with "home directory /homeless-shelter exists; please remove it". Removing that directory is the recovery (`podman exec freezer rm -rf /homeless-shelter`). Disabling the sandbox also removes it from the trust story: a build then runs with the container's environment, which holds the R2 credentials and the GitHub token.
+- Build users: the image sets an empty `build-users-group`, so there is one single-user store inside the container and builds run as the container's user inside the sandbox. Nothing depends on the deploying host's subuid range beyond the mapping rootless Podman already requires, and no build user exists to be mapped.
+- Nix 2.34.8 is pinned in the image, so the 2.33 floor (ADR 0017) holds by construction. A hand-built image is on its own.
+
+Inspect and operate:
+
+```sh
+podman compose -f ~/freezer/compose.yaml ps
+podman logs freezer
+podman healthcheck run freezer
+```
+
+Upgrades are a rebuild and a recreate: build the new tag (`podman build -t freezer:0.2.0 .`), point `image:` at it in `~/freezer/compose.yaml`, and run `podman compose -f ~/freezer/compose.yaml up -d` again. Compose recreates the container — which discards the container's own Nix store, the trade noted above, while `state_dir` is a bind mount and survives — and `restart: always` keeps it up.
 
 ## Runtime files and external services
 
@@ -43,32 +54,23 @@ Use the server configuration in [README.md](../README.md#running-the-service). B
 
 | File / setting | Contents and access |
 |---|---|
-| Server YAML | Registered public repositories, per-repository webhook secrets, cache endpoint and signing-key filename. Readable by `freezer`, not world-readable. |
-| Signing key | An ed25519 binary-cache key, mode 0600, owned by `freezer`. Back it up separately. Freezer never reads its contents; Nix opens it when copying. |
-| Environment file | `GITHUB_TOKEN`, `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`; root-readable mode 0600. systemd supplies the values to the service. |
+| Server YAML | Registered public repositories, cache endpoint and signing-key filename. Mounted read-only at `/etc/freezer/freezer.yaml`; mode 0600 on the host. |
+| Signing key | An ed25519 binary-cache key, mode 0600, owned by the deploying user. Back it up separately. Freezer never reads its contents; Nix opens it when copying. |
+| Environment file (`.env`) | `GITHUB_TOKEN`, `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`; mode 0600, gitignored, from `deploy/.env.example`. Compose passes it with `env_file`, so the values exist only in the container's environment. |
 | R2 bucket | One bucket, flat namespace. The S3 endpoint is `https://ACCOUNT_ID.r2.cloudflarestorage.com`; credentials need bucket read/write access. |
 | Public custom domain | Read-only access to that same bucket. This URL is the consumer substituter, not Freezer's HTTP address. |
-| GitHub webhook | Push events to `https://SERVICE/hooks/REPOSITORY_NAME`, with the matching repository secret and HTTPS. |
-| GitHub token | Permission to create commit statuses on every registered repository. Status context is `freezer`. |
+| GitHub token | Permission to create commit statuses on every registered repository. Status context is `freezer`; this is the only thing the service sends to GitHub. |
 
-Generate a new signing key only when setting up a new trust identity:
+Generate a new signing key only when setting up a new trust identity — in the container, as above, or anywhere Nix is installed:
 
 ```sh
 umask 077
 nix-store --generate-binary-cache-key freezer-cache-1 ./freezer-cache.key ./freezer-cache.pub
 ```
 
-Move the private file to the configured protected location using the host's secret-management mechanism. Distribute only `freezer-cache.pub` to consumers. Never put either private credentials or the signing key into a flake expression, source commit or database.
+Keep the private file where the compose file mounts it (`~/freezer/signing.key`) and nowhere else. Distribute only `freezer-cache.pub` to consumers. Never put either private credentials or the signing key into a flake expression, source commit or database.
 
 Cloudflare's public-domain setup is documented at [R2 public buckets](https://developers.cloudflare.com/r2/buckets/public-buckets/#custom-domains). Freezer does not serve the bucket or manage its domain. Configure consumer Nix with the public URL in `extra-substituters` and the public key in `extra-trusted-public-keys`.
-
-After applying the module, inspect the actual unit and its state on the designated host:
-
-```sh
-systemctl status freezer
-systemctl show freezer -p User -p Group -p WorkingDirectory -p StateDirectory -p EnvironmentFiles
-journalctl -u freezer --since today
-```
 
 Do not print the environment file or private config into shared transcripts. Open the authenticated UI, press Build now, and inspect the job's plain-text transcript if publication fails. There are no operational CLI subcommands.
 
@@ -106,13 +108,13 @@ A store path's narinfo key is its hash prefix followed by `.narinfo`. Read its p
 | Broken closure member | The affected member's narinfo, plus its nar if damaged | Press Build now for the top-level entry. The ordinary probe only sees the top-level path. |
 | Interrupted publication | Identify the missing/damaged closure member and use the applicable row above | Build now bypasses the top-level probe and copies missing members. |
 
-Deleting only a nar does **not** repair anything: both a normal probe and `nix copy` can succeed while its narinfo remains. Build now bypasses the probe, but it cannot make Nix recheck an existing narinfo's nar. Delete the matching narinfo as well. Any additional hand-run `nix path-info`, `nix copy` or substitution command must include the two TTL options above.
+Deleting only a nar does **not** repair anything: both a normal probe and `nix copy` can succeed while its narinfo remains. Build now bypasses the probe, but it cannot make Nix recheck an existing narinfo's nar. Delete the matching narinfo as well. Any additional hand-run `nix path-info`, `nix copy` or substitution command must include the two TTL options above — and on a host whose Nix does not trust the invoking user, those options are *ignored* with a warning (the default positive TTL is 30 days), so hand-run verification can report a deleted object as present. The container deployment does not have that problem: Nix runs as root inside the container, where its own configuration trusts it.
 
 If the public domain still returns stale metadata after the bucket is repaired, check the domain's cache policy and invalidate the specific stale response there. Freezer's own probe uses the S3 API and cannot verify what the public domain serves. Re-run the scratch-store substitution through the domain before considering the repair complete.
 
 ## Self-hosting
 
-Register `https://github.com/pelikanade/freezer.git` with GitHub slug `pelikanade/freezer`, using the implementation revision intended for deployment. This repository's `.freezer.yaml` declares `packages.x86_64-linux.default`. On an ARM-only host, change the declared entry to `packages.aarch64-linux.default` in the public repository, or supply an appropriate remote builder.
+Register `https://github.com/pelikanade/freezer.git` with GitHub slug `pelikanade/freezer`, using the implementation revision intended for deployment. This repository's `.freezer.yaml` declares `packages.x86_64-linux.default`. On an aarch64 container, change the declared entry to `packages.aarch64-linux.default` in the public repository, or supply an appropriate remote builder.
 
 After one successful publication, verify a cache-hit event with a subsequent default-branch commit that changes only documentation. The package source excludes documentation, so the output path remains the same. A redelivery of the **same** successful commit correctly creates no jobs; Build now deliberately skips the probe and therefore cannot demonstrate a cache hit.
 
@@ -120,7 +122,9 @@ After one successful publication, verify a cache-hit event with a subsequent def
 
 `retention` keeps the newest N jobs per repository. Startup applies it to every recorded repository; each finished event applies it to that repository. Running jobs are never deleted. Job rows and full transcripts disappear together; last-built state does not. Lowering the setting and restarting is sufficient to apply a smaller history bound.
 
-Stop the service for a file-copy backup, or use SQLite's online backup mechanism. Copying only `freezer.sqlite` while WAL writes are active is not a valid file-copy backup; use the backup API or stop the service so the WAL is checkpointed. Back up the signing key separately. Checkouts and the host store are not retained or garbage-collected by Freezer.
+Stop the service for a file-copy backup (`podman compose -f ~/freezer/compose.yaml stop`), or use SQLite's online backup mechanism. Copying only `freezer.sqlite` while WAL writes are active is not a valid file-copy backup; use the backup API or stop the service so the WAL is checkpointed. Back up the signing key separately. Checkouts and the container's Nix store are not retained or garbage-collected by Freezer.
+
+**Clearing the history.** Retention always keeps the newest N jobs, so it cannot empty the list. To start over — after a run of interrupted or failed jobs from an image change, say — stop the service and delete `freezer.sqlite` (with its `-wal` and `-shm` files) from the host's `state_dir`; the database is recreated at the next start, repository rows included. That also discards the last-built record, so the next poll builds the head again, and it drops every transcript.
 
 SQLite deletion reuses pages but does not shrink the database file. An admin may run `VACUUM` during a maintenance window after taking a backup. Do not mistake a constant file size for failed retention: check that the old job page and `/jobs/ID/log` both return 404 while the newest jobs remain readable.
 
@@ -132,14 +136,14 @@ These five checks are intentionally **not marked complete** by local tests. Fill
 
 | Roadmap criterion | Current result | Required evidence |
 |---|---|---|
-| Module applied; correct user, state, key and environment | Waiting for deployment target | Host, revision, unit properties, readable key path and successful service start. |
-| Real R2 publish and public-domain substitution | Waiting for bucket/domain and credentials | Published path and successful fresh-store copy plus hash/signature verification through the public domain. |
-| Freezer builds itself; next event is a cache hit | Waiting for deployed implementation and registered repository | Both event commits, job IDs and transcripts. Same-commit dedup is not this check. |
-| Real-host retention deletes old jobs and transcripts | Waiting for deployment target | Retention value, old job/page 404 and retained job/page 200 after a real event or restart. |
-| Real repair recipe succeeds | Waiting for a designated test object | Exact deleted keys, Build now job, and successful fresh-store substitution afterwards. |
+| Container installed; correct state, key and environment | **Done 2026-10-15**, host `neko-sphere`: image `localhost/freezer:0.1.0` (revision-tagged `0.1.0-daf7e12`) run by the compose project in `~/freezer/compose.yaml`; container healthy on `127.0.0.1:8080`; state written to the bind-mounted `~/freezer/state`; signing key and server config read-only mounts; environment from `~/freezer/.env`. The poll at start resolved `b23475c7` and posted a `pending` status with context `freezer`, verified through the GitHub API. | Host, deployed image tag, project state, readable key path and successful service start. |
+| Real R2 publish and public-domain substitution | **Publish done 2026-10-15**: 685 objects in `nix-binary-cache`; `/nix/store/lqwdwbyvx8xra6iw94jplsa7naza81gm-agent-orchestrator-0.13.5.narinfo` carries `Compression: zstd` and `Sig: freezer-cache-1:I4CM0/3R6QBIh6W8/23Z6i3yGLlpz4shYx9CTtWJn+J29kwrK4CbL6TG28Vt4RDRAuDmtGijGHqKaz4HKYr6DQ==`; `nix copy --from` the bucket's S3 endpoint into a fresh store, then `nix store verify --sigs-needed 1` with the public key, returned 0 over the closure. Substitution **through the public domain** still waits for a custom domain. | Published path and successful fresh-store copy plus hash/signature verification through the public domain. |
+| Freezer builds itself; next event is a cache hit | Cache **hit** demonstrated on real data: `agent-orchestrator-0.13.5`, published by one event, was `cached — nothing built` in the next event, its probe answered by the bucket. Self-hosting — registering this repository — is not configured yet. | Both event commits, job IDs and transcripts. Same-commit dedup is not this check. |
+| Real-host retention deletes old jobs and transcripts | Not demonstrated on real data: `retention` is 1000 and nothing has aged out. The history was cleared once by hand instead (see "Clearing the history"). | Retention value, old job/page 404 and retained job/page 200 after a real event or restart. |
+| Real repair recipe succeeds | Waiting for a designated test object. | Exact deleted keys, Build now job, and successful fresh-store substitution afterwards. |
 
-Local verification is tracked in [ROADMAP.md](../ROADMAP.md) and the owner's gitignored project map. It proves the implementation against Silo and a GitHub HTTP stand-in; it does not prove Cloudflare, a custom domain or the real GitHub token.
+Local verification is tracked in [ROADMAP.md](../ROADMAP.md) and the owner's gitignored project map. It proves the implementation against Silo and a GitHub HTTP stand-in. The record above now covers the real bucket, the real R2 credentials and the real GitHub token; a custom domain, retention on aged data, and the repair recipe are still open.
 
-The local self-hosting smoke also compiled a temporary clone of the final implementation through the packaged service, verified a documentation-only follow-up as a cache hit, and substituted the result into a fresh store with hash/signature checks. A comment in the temporary clone forced a new derivation; no product behavior was changed for the smoke. The service used its own HOME and did not inherit the developer's `XDG_CONFIG_HOME` Git filters, matching the module's separate-account environment. Raw transcripts and exact fixture revisions are retained in `.project-map/`.
+The local self-hosting smoke also compiled a temporary clone of the final implementation through the packaged service, verified a documentation-only follow-up as a cache hit, and substituted the result into a fresh store with hash/signature checks. A comment in the temporary clone forced a new derivation; no product behavior was changed for the smoke. The service used its own HOME and did not inherit the developer's `XDG_CONFIG_HOME` Git filters, matching the deployed container's environment. Raw transcripts and exact fixture revisions are retained in `.project-map/`.
 
 For hand-run flake and store commands, enable `nix-command` and `flakes` or pass `--extra-experimental-features 'nix-command flakes'`. Freezer supplies those features per invocation and leaves the host configuration alone.

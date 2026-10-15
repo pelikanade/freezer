@@ -102,6 +102,8 @@ func resultIcon(r Result) string {
 		return "hit"
 	}
 	switch r.Status {
+	case "planned":
+		return "clock"
 	case "running":
 		return "run"
 	case "succeeded":
@@ -117,24 +119,32 @@ func resultIcon(r Result) string {
 	}
 }
 
-func resultSummary(r Result) string {
-	if r.MatchedNothing {
+func resultSummary(j Job) string {
+	if j.MatchedNothing {
 		return "nothing verified or published"
 	}
-	if r.CacheHit {
+	if j.CacheHit {
 		return "cached — nothing built"
 	}
-	switch r.Status {
+	switch j.Status {
+	case "planned":
+		return "waiting for a build slot"
 	case "running":
 		return "decided when the job finishes"
 	case "succeeded":
-		return fmt.Sprintf("published %d paths", r.Published)
+		return fmt.Sprintf("published %d paths", j.Published)
 	case "stopped":
+		if j.StartedAt.IsZero() {
+			return "nothing ran for this entry"
+		}
 		return "stopped by the operator"
 	case "interrupted":
+		if j.StartedAt.IsZero() {
+			return "it had not started when freezer restarted"
+		}
 		return "freezer restarted mid-build"
 	default:
-		summary, _, _ := strings.Cut(r.Error, "\n")
+		summary, _, _ := strings.Cut(j.Error, "\n")
 		return summary
 	}
 }
@@ -145,7 +155,6 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /{$}", s.index)
 	mux.HandleFunc("GET /jobs/{id}", s.jobPage)
 	mux.HandleFunc("GET /jobs/{id}/log", s.jobTranscript)
-	mux.HandleFunc("POST /hooks/{repo}", s.webhook)
 	mux.HandleFunc("POST /build/{repo}", s.buildNow)
 	mux.HandleFunc("POST /jobs/{id}/stop", s.stopJob)
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {

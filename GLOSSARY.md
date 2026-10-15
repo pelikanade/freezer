@@ -45,12 +45,20 @@ A job that was running when the server restarted, so its commit is not recorded.
 _Avoid_: crashed, lost
 
 **Build event**:
-A push to a qualifying ref, or a manual Build now, from which jobs are created.
+A push discovered by polling the default-branch head, or a manual Build now, from which jobs are created.
 _Avoid_: trigger, run, pipeline
+
+**Poll interval**:
+How often the build server compares each registered repository's default-branch head with the commit last built. It is the only trigger, so it is required and positive.
+_Avoid_: schedule, cron, heartbeat
 
 **Build now**:
 The manual action that starts a build event for a repository's current default-branch head. It skips the last-built check and the probe.
 _Avoid_: rebuild, retry, re-run
+
+**Planned**:
+A job recorded when its event starts, still waiting for a global build slot. It has no start time and no transcript yet; it becomes running when it starts, stopped if its event ends first, or interrupted if the server restarts first.
+_Avoid_: queued (that is the waiting event), pending, scheduled
 
 **Queued event**:
 The one build event waiting for its repository's current run to finish. A newer event replaces it, and a replaced event leaves no trace.
@@ -69,7 +77,7 @@ Building an entry if needed, then copying its output path to the binary cache, s
 _Avoid_: push, upload, deploy
 
 **Last-built commit**:
-The commit a repository last built successfully, so a redelivered webhook does not build it again. It is not a claim about what the cache holds.
+The commit a repository last built successfully, so a poll that finds the same head does not build it again. It is not a claim about what the cache holds.
 _Avoid_: last build, head
 
 **Substituter**:

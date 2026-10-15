@@ -263,6 +263,13 @@ h1, h2 { margin: 0; font-weight: bold; }
   .content { padding: 10px 8px 14px; }
   .tv thead { display: none; }
   .tv .c-hide { display: none; }
+  /* With the header row gone, `table-layout: fixed` has no widths to take from the
+     first row and splits the table into one equal track per column — including the
+     five the block above hides — so the entry column came out 58px wide at 467px
+     and wrapped its text one character per line. Auto layout sizes the two that have
+     widths (icon, action) and gives the entry the rest, which is this breakpoint's
+     stated design: icon + entry + secondary line, action still visible. */
+  .tv.jobs table { table-layout: auto; }
   .tv td, .tv tbody th { height: auto; padding: 6px 6px; }
   .tv .stc { width: 28px; padding-right: 0; vertical-align: top; padding-top: 8px; }
   .tv .act { width: 100px; }

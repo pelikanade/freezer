@@ -12,6 +12,16 @@ devenv.local.yaml
 # project map (local status board)
 .project-map/
 
+# Deployment credentials (see deploy/.env.example)
+.env
+.env.local
+
+# Private deployment config: registered repositories, and webhook secrets if any
+deploy/freezer.yaml
+
 # Nix build results
 /result
 /result-*
+
+# Local build output
+/freezer

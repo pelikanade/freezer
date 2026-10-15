@@ -20,6 +20,7 @@ type Config struct {
 	GlobCap        int           `yaml:"glob_cap"`
 	JobTimeout     time.Duration `yaml:"job_timeout"`
 	Listen         string        `yaml:"listen"`
+	PollInterval   time.Duration `yaml:"poll_interval"`
 	StateDir       string        `yaml:"state_dir"`
 	GlobalBuildCap int           `yaml:"global_build_cap"`
 	Retention      int           `yaml:"retention"`
@@ -30,10 +31,9 @@ type Config struct {
 }
 
 type Repository struct {
-	Name          string `yaml:"name"`
-	URL           string `yaml:"url"`
-	GitHub        string `yaml:"github"`
-	WebhookSecret string `yaml:"webhook_secret"`
+	Name   string `yaml:"name"`
+	URL    string `yaml:"url"`
+	GitHub string `yaml:"github"`
 }
 
 type CacheConfig struct {
@@ -76,6 +76,9 @@ func LoadConfig(filename string) (Config, error) {
 	if cfg.GlobCap < 1 || cfg.JobTimeout <= 0 {
 		return cfg, fmt.Errorf("glob_cap and job_timeout must be positive")
 	}
+	if cfg.PollInterval <= 0 {
+		return cfg, fmt.Errorf("poll_interval must be positive: polling is the only trigger")
+	}
 	if cfg.Cache.Bucket == "" || strings.ContainsAny(cfg.Cache.Bucket, "/?#@:") {
 		return cfg, fmt.Errorf("cache.bucket must be one bucket name without a prefix")
 	}
@@ -116,8 +119,8 @@ func LoadConfig(filename string) (Config, error) {
 			return cfg, fmt.Errorf("repository names must be unique safe path components")
 		}
 		names[repo.Name] = true
-		if repo.URL == "" || !githubSlug.MatchString(repo.GitHub) || repo.WebhookSecret == "" {
-			return cfg, fmt.Errorf("repository %s requires url, github (owner/name) and webhook_secret", repo.Name)
+		if repo.URL == "" || !githubSlug.MatchString(repo.GitHub) {
+			return cfg, fmt.Errorf("repository %s requires url and github (owner/name)", repo.Name)
 		}
 	}
 	return cfg, nil
