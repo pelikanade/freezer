@@ -56,6 +56,10 @@ _Avoid_: schedule, cron, heartbeat
 The manual action that starts a build event for a repository's current default-branch head. It skips the last-built check and the probe.
 _Avoid_: rebuild, retry, re-run
 
+**Planned**:
+A job recorded when its event starts, still waiting for a global build slot. It has no start time and no transcript yet; it becomes running when it starts, stopped if its event ends first, or interrupted if the server restarts first.
+_Avoid_: queued (that is the waiting event), pending, scheduled
+
 **Queued event**:
 The one build event waiting for its repository's current run to finish. A newer event replaces it, and a replaced event leaves no trace.
 _Avoid_: backlog, pending

@@ -162,7 +162,7 @@ Custom properties in one hand-written stylesheet (and only there). No CSS framew
 | Toolbar | `.toolbar` + `.tb` | Reload, Auto-refresh toggle (aria-pressed), Stop (running job), Jobs (detail). Real `<button>` / `<a>`. |
 | Pathbar | `.pathbar` + `.btn-path` | Job pages: freezer → repo → `#id entry`. Current crumb `aria-current="page"`. Omit on index. |
 | Treeview | `.tv table` | Sunken border, sticky header, rules-hint stripes, hover prelight, selected row uses `--fz-select`. Explicit `.fx-status` (or `.st`) class — **never** structural selectors. |
-| Status icon+word | `.st` / `.st-{status}` | Icon + word; never colour alone. Words: `running` · `succeeded` · `failed` · `stopped` · `interrupted` · `matched nothing` (display only; underlying status stays `succeeded` for matched-nothing). |
+| Status icon+word | `.st` / `.st-{status}` | Icon + word; never colour alone. Words: `planned` · `running` · `succeeded` · `failed` · `stopped` · `interrupted` · `matched nothing` (display only; underlying status stays `succeeded` for matched-nothing). A planned job shows a dash for Started and Duration, and its page says it waits for a build slot. |
 | Progress | `.pbar` | Pulse candy for running (respect `prefers-reduced-motion`). |
 | Button | `.btn` / `.btn-sm` / `.btn-default` | Gradient Clearlooks; default-button ring for the dialog primary. |
 | InfoBar | `.infobar.{info,warning,question,error}` | Icon + primary + secondary + optional acts. `role="alert"` only for **failed**; running/notice use `role="status"`. |
@@ -199,6 +199,7 @@ Custom properties in one hand-written stylesheet (and only there). No CSS framew
 | Never-built repo | Italic “never built”; Latest = “no jobs” |
 | Running | Spinner + pulse bar; Stop on row + toolbar; meta refresh 10s (job) / 15s (index if any running); Cache/Published pending |
 | Succeeded (built) | Green check; duration; published count |
+| Planned | Clock icon + “planned”; Started and Duration show —, the Cache cell reads “not yet probed”, and the transcript well says the job waits for a build slot. An event that ends first leaves the row `stopped`; a restart leaves it `interrupted` (ADR 0025). |
 | Succeeded + cache hit | Distinct hit icon (check + badge); no transcript; empty well |
 | Succeeded + matched nothing | Warning InfoBar + “matched nothing” label; underlying status remains succeeded; 0 paths; cache “not probed” |
 | Failed | Error InfoBar with **`The job did not succeed`**; transcript opens at end; red error lines |
@@ -237,7 +238,7 @@ Primary: CSS-only — wrap the transcript in a flex column-reverse scroller so t
 
 1. One hand-written stylesheet carrying the Clearlooks tokens above; no CSS framework; AA contrast held for body, link, muted, borders, focus.
 2. Index shows repos treeview + jobs treeview; jobs grouped by `(repo, commit)` when contiguous; Duration and a Result column present.
-3. Status icons distinguish **failed / stopped / interrupted / matched-nothing / cache-hit / running / succeeded**; words remain; colour never alone.
+3. Status icons distinguish **failed / stopped / interrupted / planned / matched-nothing / cache-hit / running / succeeded**; words remain; colour never alone.
 4. Matched-nothing jobs carry a warning InfoBar and do not read as ordinary success.
 5. Stopped jobs never use the failed danger copy; interrupted jobs explain restart and show an empty-well (no blank transcript).
 6. Failed jobs say exactly **`The job did not succeed`**; transcript has no per-line grey chips; initial scroll is at the end.

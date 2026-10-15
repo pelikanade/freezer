@@ -22,3 +22,6 @@ deploy/freezer.yaml
 # Nix build results
 /result
 /result-*
+
+# Local build output
+/freezer

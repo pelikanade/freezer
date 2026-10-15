@@ -160,6 +160,19 @@ func (s *serviceFixture) stop(t *testing.T) {
 	s.cmd = nil
 }
 
+// kill stops the service without letting it shut down, which is what a crash or
+// a SIGKILL looks like: the database keeps whatever the running and planned jobs
+// had, and the next start has to account for them.
+func (s *serviceFixture) kill(t *testing.T) {
+	t.Helper()
+	if s.cmd == nil {
+		return
+	}
+	_ = s.cmd.Process.Kill()
+	_ = s.cmd.Wait()
+	s.cmd = nil
+}
+
 func (s *serviceFixture) get(t *testing.T, path string) (int, string) {
 	t.Helper()
 	response, err := s.client.Get(s.url + path)
@@ -404,11 +417,20 @@ func TestRestartPreservesLastBuilt(t *testing.T) {
 }
 
 func TestRestartInterruptsRunningJob(t *testing.T) {
-	s := newService(t, "packages.@system@.slow")
+	s := newService(t, "packages.@system@.slow", "packages.@system@.hello")
+	data, err := os.ReadFile(s.configPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(s.configPath, bytes.ReplaceAll(data, []byte("global_build_cap: 2"), []byte("global_build_cap: 1")), 0600); err != nil {
+		t.Fatal(err)
+	}
 	s.start(t)
 	s.nextStatus(t, "pending")
 	s.waitPage(t, "/jobs/1/log", "$ nix copy")
-	s.stop(t)
+	// The cap holds the second entry back, so it is planned when the service dies.
+	s.waitPage(t, "/jobs/2", "waiting for a build slot")
+	s.kill(t)
 	s.start(t)
 	_, page := s.get(t, "/jobs/1")
 	if !strings.Contains(page, "freezer restarted mid-build") || !strings.Contains(page, "The commit was not recorded") {
@@ -417,6 +439,10 @@ func TestRestartInterruptsRunningJob(t *testing.T) {
 	_, transcript := s.get(t, "/jobs/1/log")
 	if !strings.Contains(transcript, "$ nix copy") {
 		t.Fatalf("lost interrupted transcript: %s", transcript)
+	}
+	_, planned := s.get(t, "/jobs/2")
+	if !strings.Contains(planned, "freezer restarted before this job started") || !strings.Contains(planned, "interrupted") {
+		t.Fatalf("a job the restart found unstarted is not reported interrupted: %s", planned)
 	}
 	// The commit was never recorded, so the poll after the restart starts it
 	// again: an interrupted event recovers without an operator.
@@ -481,6 +507,41 @@ func TestJobPagesPreserveContiguousGroups(t *testing.T) {
 	}
 }
 
+// The whole event is visible while it runs: the entries the cap holds back are
+// listed as planned, each with its own page, from the moment the event starts
+// (ADR 0025).
+func TestPlannedEntriesAreVisibleBeforeTheyRun(t *testing.T) {
+	s := newService(t, "packages.@system@.slow", "packages.@system@.hello", "packages.@system@.second")
+	data, err := os.ReadFile(s.configPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(s.configPath, bytes.ReplaceAll(data, []byte("global_build_cap: 2"), []byte("global_build_cap: 1")), 0600); err != nil {
+		t.Fatal(err)
+	}
+	s.start(t)
+	s.nextStatus(t, "pending")
+	s.waitPage(t, "/jobs/1/log", "$ nix copy")
+	for _, id := range []int{2, 3} {
+		page := s.waitPage(t, fmt.Sprintf("/jobs/%d", id), "waiting for a build slot")
+		if !strings.Contains(page, "planned") || !strings.Contains(page, "not yet probed") {
+			t.Fatalf("job %d is not shown as planned: %s", id, page)
+		}
+	}
+	_, index := s.get(t, "/")
+	for _, id := range []int{1, 2, 3} {
+		if !strings.Contains(index, fmt.Sprintf(`href="/jobs/%d"`, id)) {
+			t.Fatalf("the index does not list job %d while its event runs:\n%s", id, index)
+		}
+	}
+	s.post(t, "/jobs/1/stop", "/jobs/1?notice=stop")
+	s.nextStatus(t, "error")
+	s.idle(t)
+	if page := s.waitPage(t, "/jobs/3", "The event ended before this job started."); !strings.Contains(page, "stopped") {
+		t.Fatalf("a job the event never started did not end as stopped: %s", page)
+	}
+}
+
 func TestGlobalCapAndStopPreventLaterJobs(t *testing.T) {
 	s := newService(t, "packages.@system@.slow", "packages.@system@.hello")
 	data, err := os.ReadFile(s.configPath)
@@ -494,22 +555,30 @@ func TestGlobalCapAndStopPreventLaterJobs(t *testing.T) {
 	s.start(t)
 	s.nextStatus(t, "pending")
 	s.waitPage(t, "/jobs/1/log", "$ nix copy")
-	if code, _ := s.get(t, "/jobs/2"); code != 404 {
-		t.Fatalf("global cap did not hold: %d", code)
+	if page := s.waitPage(t, "/jobs/2", "waiting for a build slot"); !strings.Contains(page, "planned") {
+		t.Fatalf("the entry the cap holds back is not shown as planned: %s", page)
 	}
 	s.post(t, "/jobs/1/stop", "/jobs/1?notice=stop")
 	s.nextStatus(t, "error")
 	s.idle(t)
-	if code, _ := s.get(t, "/jobs/2"); code != 404 {
-		t.Fatalf("Stop allowed a later job: %d", code)
+	if page := s.waitPage(t, "/jobs/2", "The event ended before this job started."); !strings.Contains(page, "stopped") {
+		t.Fatalf("a job the event never started did not end as stopped: %s", page)
 	}
-	s.setEntries(t, s.entry("hello"))
+	// The new event starts with the nonce-named slow fixture, so its probe cannot
+	// answer from a stale local narinfo cache and the copy really runs.
+	s.setEntries(t, s.entry("slow"), s.entry("hello"))
 	s.post(t, "/build/demo", "/?notice=build&repo=demo")
 	s.nextStatus(t, "pending")
-	s.nextStatus(t, "success")
-	if code, _ := s.get(t, "/jobs/2"); code != 200 {
-		t.Fatalf("Stop leaked the global build slot: %d", code)
+	// The slot the stopped event released is usable again: the new event's first
+	// job runs, and the one the cap holds back is planned rather than missing.
+	if page := s.waitPage(t, "/jobs/3/log", "$ nix copy"); !strings.Contains(page, "slow") {
+		t.Fatalf("the new event's first job did not run: %s", page)
 	}
+	if page := s.waitPage(t, "/jobs/4", "waiting for a build slot"); !strings.Contains(page, "planned") {
+		t.Fatalf("the new event's second entry is not planned: %s", page)
+	}
+	s.post(t, "/jobs/3/stop", "/jobs/3?notice=stop")
+	s.nextStatus(t, "error")
 }
 
 func TestRetentionDeletesJobsAndTranscripts(t *testing.T) {

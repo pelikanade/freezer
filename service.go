@@ -235,12 +235,27 @@ func (s *Server) runEvent(ctx context.Context, repo *repositoryRun, event BuildE
 		return
 	}
 	planned := expandEntries(ctx, s.cfg, checkout, entries)
+	// Every planned entry gets a record before anything runs. The UI is the only
+	// control surface, so an entry that is planned but still waiting for a global
+	// build slot has to be visible while the event runs, instead of appearing only
+	// when it starts (ADR 0025).
+	jobs := make([]Job, len(planned))
+	for i, plan := range planned {
+		job := Job{Repo: repo.repository.Name, Commit: commit, Result: Result{Entry: plan.Entry, Status: "planned", Transcript: plan.Transcript}}
+		if err := s.db.Create(&job).Error; err != nil {
+			s.recordResult(repo.repository.Name, "failure", "could not record the event's jobs: "+err.Error(), "")
+			s.report(repo.repository, commit, "failure", "Could not record the event's jobs")
+			return
+		}
+		jobs[i] = job
+	}
 	var workers sync.WaitGroup
 	var resultMu sync.Mutex
 	failed := 0
 	eventError := ""
 schedule:
-	for _, plan := range planned {
+	for i, job := range jobs {
+		plan := planned[i]
 		select {
 		case <-ctx.Done():
 			break schedule
@@ -252,9 +267,13 @@ schedule:
 			<-s.slots
 			break
 		}
-		job := Job{Repo: repo.repository.Name, Commit: commit, Result: Result{Entry: plan.Entry, Status: "running", Transcript: plan.Transcript}, StartedAt: time.Now().UTC()}
-		err := s.db.Create(&job).Error
+		started := time.Now().UTC()
+		err := s.db.Model(&Job{}).Where("id = ?", job.ID).Updates(map[string]any{"status": "running", "started_at": started}).Error
 		if err == nil {
+			jobs[i].Result.Status = "running"
+			jobs[i].StartedAt = started
+			job.Result.Status = "running"
+			job.StartedAt = started
 			s.activeJobs[job.ID] = repo
 		}
 		s.mu.Unlock()
@@ -295,6 +314,17 @@ schedule:
 		}(job, plan)
 	}
 	workers.Wait()
+	// An event can end with work still unstarted: the operator stopped it, or a
+	// recording step failed. Those jobs never ran, so they say so instead of
+	// sitting in the list as planned forever.
+	for _, job := range jobs {
+		if job.Result.Status != "planned" {
+			continue
+		}
+		if err := s.db.Model(&Job{}).Where("id = ?", job.ID).Updates(map[string]any{"status": "stopped", "error": "The event ended before this job started."}).Error; err != nil {
+			log.Printf("close unstarted job %d: %v", job.ID, err)
+		}
+	}
 	if s.ctx.Err() != nil {
 		return
 	}

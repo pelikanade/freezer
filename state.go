@@ -51,6 +51,9 @@ func openState(directory string) (*gorm.DB, error) {
 	if err := db.Model(&Job{}).Where("status = ?", "running").Updates(map[string]any{"status": "interrupted", "error": "freezer restarted mid-build", "finished_at": nil}).Error; err != nil {
 		return fail(err)
 	}
+	if err := db.Model(&Job{}).Where("status = ?", "planned").Updates(map[string]any{"status": "interrupted", "error": "freezer restarted before this job started", "finished_at": nil}).Error; err != nil {
+		return fail(err)
+	}
 	if err := db.Model(&RepositoryState{}).Where("last_result = ?", "running").Updates(map[string]any{"last_result": "interrupted", "last_error": "freezer restarted; commit not recorded"}).Error; err != nil {
 		return fail(err)
 	}
