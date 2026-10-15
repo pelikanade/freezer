@@ -16,6 +16,9 @@ devenv.local.yaml
 .env
 .env.local
 
+# Private server configuration: registered repositories and webhook secrets
+deploy/freezer.yaml
+
 # Nix build results
 /result
 /result-*
