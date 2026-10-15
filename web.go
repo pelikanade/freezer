@@ -145,7 +145,6 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /{$}", s.index)
 	mux.HandleFunc("GET /jobs/{id}", s.jobPage)
 	mux.HandleFunc("GET /jobs/{id}/log", s.jobTranscript)
-	mux.HandleFunc("POST /hooks/{repo}", s.webhook)
 	mux.HandleFunc("POST /build/{repo}", s.buildNow)
 	mux.HandleFunc("POST /jobs/{id}/stop", s.stopJob)
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {

@@ -45,11 +45,11 @@ A job that was running when the server restarted, so its commit is not recorded.
 _Avoid_: crashed, lost
 
 **Build event**:
-A push to a qualifying ref, a change of the default-branch head found by polling, or a manual Build now, from which jobs are created.
+A push discovered by polling the default-branch head, or a manual Build now, from which jobs are created.
 _Avoid_: trigger, run, pipeline
 
 **Poll interval**:
-How often the build server compares each registered repository's default-branch head with the commit last built, for deployments GitHub cannot reach. Off by default; the head check itself is the last-built check that pushes use.
+How often the build server compares each registered repository's default-branch head with the commit last built. It is the only trigger, so it is required and positive.
 _Avoid_: schedule, cron, heartbeat
 
 **Build now**:
@@ -73,7 +73,7 @@ Building an entry if needed, then copying its output path to the binary cache, s
 _Avoid_: push, upload, deploy
 
 **Last-built commit**:
-The commit a repository last built successfully, so a redelivered webhook does not build it again. It is not a claim about what the cache holds.
+The commit a repository last built successfully, so a poll that finds the same head does not build it again. It is not a claim about what the cache holds.
 _Avoid_: last build, head
 
 **Substituter**:

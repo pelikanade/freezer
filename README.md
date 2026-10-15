@@ -1,6 +1,6 @@
 # Freezer
 
-A self-hosted, webhook-driven build service for nix flakes. It publishes built store paths to a public, signed, S3-compatible binary cache (Cloudflare R2), so consumers substitute them instead of rebuilding.
+A self-hosted build service for nix flakes. It polls the registered GitHub repositories, builds what their build lists declare, and publishes the results to a public, signed, S3-compatible binary cache (Cloudflare R2), so consumers substitute them instead of rebuilding.
 
 Status: implementation complete through the local v2 deliverables: build loop, service, Clearlooks UI, retention, flake package, container image and repair runbook. Real-host/R2 acceptance remains pending; see [ROADMAP.md](ROADMAP.md) and the [runbook](docs/runbook.md).
 
@@ -14,14 +14,14 @@ It is for one admin running it on their own host for their own public repositori
 
 **Product surfaces**
 
-- **Trigger input**, whichever the deployment can reach: a **webhook endpoint** per registered repository (`POST /hooks/<repo>`, called by GitHub on push), or a **poll interval** (`poll_interval`) that compares each repository's default-branch head with the commit last built. With polling alone, nothing inbound is needed and no public route exists.
+- **Trigger input**: the poll interval. Every registered repository's default-branch head is resolved at start and on each interval afterwards, and a head that is not the commit last built starts an event. Nothing inbound is needed — there is no webhook route, no signature to check and no way in from outside the UI.
 - **Web UI**, the only control surface: home (repositories and recent jobs), job page (details and transcript), and the Build now and Stop actions. There is no CLI. Anything the UI can't do is a config edit and a restart.
-- **Server config file**, edited by the admin: registered repositories with their webhook secrets, cache target, signing key path, glob cap, global build cap, job timeout, retention, GitHub token, and the poll interval.
+- **Server config file**, edited by the admin: registered repositories, cache target, signing key path, glob cap, global build cap, job timeout, retention, poll interval, and the GitHub token.
 - **Build-list file** in each repository (`.freezer.yaml`): the repository's build list, and nothing else.
 
 **External pieces**
 
-- **GitHub**: push webhooks in (optional; polling replaces them) and commit statuses out (one shared service token).
+- **GitHub**: commit statuses out (one shared service token). Nothing comes in: pushes are found by polling the branch head.
 - **Nix** (≥ 2.33): does all building, publishing, and cache probing. The container image carries it; running the binary directly uses the host's daemon.
 - **The S3-compatible bucket** (R2), read publicly through a custom domain. Freezer never serves the cache itself.
 - **A reverse proxy** (or an SSH tunnel to a localhost bind) in front of the UI. It provides TLS and access control.
@@ -32,15 +32,12 @@ Terms are defined in [GLOSSARY.md](GLOSSARY.md). The reasons for each choice are
 
 ### Push, build, publish
 
-An event starts in one of two ways, and everything after that is identical.
+A push is found, not delivered. The service resolves each registered repository's default-branch head at start and every `poll_interval` afterwards; a head that is not the commit last built starts a build event. Nothing arrives from outside, so there is no signature to check, no inbound route to expose and no way to lose a push: an event missed while the service was down is found by the next poll.
 
-- **A push.** GitHub POSTs a push to the repository's webhook endpoint, which is why the service needs one publicly reachable route. Step 1 below.
-- **A poll.** With `poll_interval` set, the service resolves every registered repository's default-branch head on that interval — at once when it starts, then every interval — and starts the same event whenever the head is not the commit last built. Nothing inbound is needed: polling is `git ls-remote` out, and commit statuses still go out. A deployment GitHub cannot reach uses this and leaves the webhook route unused.
-
-1. GitHub POSTs a push to the repository's webhook endpoint. Unregistered repositories are rejected, and so is a repository with no `webhook_secret`: without a key every signature would be forgeable, so an empty secret means the repository has no webhook route and every delivery is refused with 403. The signature is checked against that repository's own secret, and a bad signature produces no job at all. Pushes that don't touch the default branch are acknowledged and dropped. Force-pushes count.
-2. The event goes into the repository's queue, which holds one waiting event. A newer event replaces it — except that nothing displaces a waiting Build now, whose reachability matters more than a coalesced push — and a running event is never cancelled by a push. One event runs per repository at a time, and different repositories run in parallel. The webhook always accepts, since there is no backlog to fill. A superseded event leaves no trace and gets no commit status. A polled event whose head is unchanged ends at the last-built check in step 3, so polling costs one resolution per repository per interval and nothing else.
-3. When the event starts, the default branch head is resolved then, not when the push arrived, so a commit that a faster push already overtook is never built. If the resolved commit equals the last-built commit, the event ends there with no jobs.
-4. Freezer posts a `pending` commit status on the resolved commit (not the payload's commit, which can differ after a force-push). It reads the repository's build-list file without evaluating any nix. A missing or unreadable file means `failure` and nothing gets built: reading config must never build anything.
+1. A poll resolves the repository's default-branch head through git (`git ls-remote --symref`). Repositories that are not registered are never resolved — registration is the whole allowlist.
+2. The event goes into the repository's queue, which holds one waiting event. A newer event replaces it — except that nothing displaces a waiting Build now, whose reachability matters more than a coalesced poll — and a running event is never cancelled by a later one. One event runs per repository at a time, and different repositories run in parallel. A superseded event leaves no trace and gets no commit status. An event whose head is unchanged ends at the last-built check in step 3, so polling costs one resolution per repository per interval and nothing else.
+3. The head is resolved again when the event starts, so a commit that a later push overtook while the event waited is never built: what gets built is whatever the branch points at then. If the resolved commit equals the last-built commit, the event ends there with no jobs.
+4. Freezer posts a `pending` commit status on that resolved commit. It reads the repository's build-list file without evaluating any nix. A missing or unreadable file means `failure` and nothing gets built: reading config must never build anything.
 5. Each entry becomes jobs:
    - **Glob expansion**: a glob entry lists the attribute names under its declared prefix, one level only, capped per event. Over the cap, every entry of that pattern fails with a clear message and none build; truncating silently would make the build list a lie. A prefix that doesn't exist fails that pattern's entries only, and other entries still build. A pattern that matches nothing is not an error, and its job is labelled *matched nothing*.
    - **Output path**: evaluate the entry's output path without building. Evaluation is never allowed to build (import-from-derivation is off here). A failed evaluation is not a job failure. It just counts as a miss.
@@ -53,10 +50,10 @@ An event starts in one of two ways, and everything after that is identical.
 
 ### Repair and control
 
-- **Build now** (per repository, in the UI) starts a build event for the current default-branch head. It skips both the last-built check and the probe, so publishing always runs. This is the repair path: the probe only looks at an entry's own top-level path, so a probe-first run can't repair a broken closure. It is also how a missed push gets built.
+- **Build now** (per repository, in the UI) starts a build event for the current default-branch head immediately. It skips both the last-built check and the probe, so publishing always runs. This is the repair path: the probe only looks at an entry's own top-level path, so a probe-first run can't repair a broken closure. It is also how an operator who does not want to wait for the next poll gets a build — or a missed push — published.
 - **Stop** cancels the running job, records it as stopped, starts no further jobs of that event, and reports `error`. A stopped event is over, not partly built.
 - **Job timeout**: each job has one. Together with Stop, it bounds a hung build, which would otherwise hold up that repository's later commits.
-- **Restart**: events in memory are lost, and a job that was running shows as interrupted, with its commit not recorded. The last-built record survives a restart, so nothing is rebuilt.
+- **Restart**: events in memory are lost, and a job that was running shows as interrupted, with its commit not recorded. The last-built record survives a restart, so nothing is rebuilt; a head that was never recorded is found by the poll that runs at start.
 
 ### Transcripts
 
@@ -102,7 +99,7 @@ podman build -t freezer:0.1.0 .
 
 The image carries Nix 2.34.8, git and curl, so the host needs no Nix of its own, and the service drives the Nix inside the container. `deploy/` holds the Quadlet unit and example configuration and environment files; [the runbook](docs/runbook.md#deploy-as-a-container) covers the image, secrets, the unit, R2, public-domain substitution, self-hosting, retention and repair.
 
-Running the binary directly is also supported: `devenv shell -- go build -o .devenv/freezer .`, or `nix build` and then `./result/bin/freezer /path/to/server.yaml` (`packages.<system>.default`). That route uses the host's Nix, so the host's daemon must be at least 2.33 (2.34 tested); use at least 2.33.6 for the backported path-addressing option when selecting the 2.33 series. The binary has one mode and takes only the configuration filename. Bind to localhost behind an authenticated reverse proxy or SSH tunnel. Expose only `/hooks/<name>` to GitHub, configured for push events and the matching per-repository secret.
+Running the binary directly is also supported: `devenv shell -- go build -o .devenv/freezer .`, or `nix build` and then `./result/bin/freezer /path/to/server.yaml` (`packages.<system>.default`). That route uses the host's Nix, so the host's daemon must be at least 2.33 (2.34 tested); use at least 2.33.6 for the backported path-addressing option when selecting the 2.33 series. The binary has one mode and takes only the configuration filename. Bind to localhost behind an authenticated reverse proxy or SSH tunnel; nothing needs to be reachable from outside, because triggering is polling.
 
 ```yaml
 # Container deployments must listen on 0.0.0.0; the binary route binds loopback.
@@ -112,8 +109,8 @@ global_build_cap: 2
 glob_cap: 200
 job_timeout: 30m
 retention: 1000
-# Off when absent or 0: pushes arrive by webhook and the head is never polled.
-# Set it to a duration (10m, 1h) when GitHub cannot reach the service.
+# Required and positive: polling is the only trigger. 10m to 1h is the usual
+# range; a poll costs one branch resolution per repository.
 poll_interval: 15m
 public_url: https://freezer.example.com
 cache:
@@ -124,10 +121,9 @@ repositories:
   - name: personal-flake
     url: https://github.com/OWNER/REPOSITORY.git
     github: OWNER/REPOSITORY
-    webhook_secret: REPLACE_WITH_A_RANDOM_SECRET
 ```
 
-Set `GITHUB_TOKEN` (or the private config's `github_token`) to a shared token allowed to create commit statuses. Nix reads `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY` from the environment. Keep the server config private: it holds webhook secrets. Register public repositories only; all published outputs are public. `github_api_base` defaults to `https://api.github.com` and exists as the network test seam.
+Set `GITHUB_TOKEN` (or the private config's `github_token`) to a shared token allowed to create commit statuses. Nix reads `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY` from the environment. Keep the server config private: it names the repositories you publish for and may carry the GitHub token. Register public repositories only; all published outputs are public. `github_api_base` defaults to `https://api.github.com` and exists as the network test seam.
 
 State lives in `state_dir/freezer.sqlite`; persistent checkouts live under `state_dir/checkouts/`. Restarting loses queued events and marks running jobs interrupted, retaining the transcript already recorded. Build now and Stop are HTML form actions. Job history, paging and full plain-text transcripts require no JavaScript. The last-built commit survives a restart.
 

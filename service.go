@@ -3,8 +3,6 @@ package main
 import (
 	"bytes"
 	"context"
-	"crypto/hmac"
-	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -21,10 +19,12 @@ import (
 	"gorm.io/gorm"
 )
 
+// BuildEvent is a request to build a repository's current default-branch head.
+// Force marks Build now, which skips the last-built check and the probe; the
+// index page shows a waiting event's age, so the time it was raised is kept.
 type BuildEvent struct {
-	Force        bool
-	ReceivedAt   time.Time
-	PushedCommit string
+	Force      bool
+	ReceivedAt time.Time
 }
 type repositoryRun struct {
 	repository Repository
@@ -353,59 +353,6 @@ func (s *Server) report(repo Repository, commit, state, description string) {
 		log.Printf("commit status %s/%s: %v", repo.Name, commit, err)
 		s.db.Model(&RepositoryState{}).Where("name = ?", repo.Name).Update("last_error", "Commit status delivery failed: "+err.Error())
 	}
-}
-
-func (s *Server) webhook(w http.ResponseWriter, r *http.Request) {
-	repo := s.repos[r.PathValue("repo")]
-	if repo == nil {
-		s.errorPage(w, r, 404, "Repository not registered", "Register it in the server configuration.")
-		return
-	}
-	// A repository without a secret has no webhook route: an empty key would make
-	// every signature forgeable, and a deployment that polls needs no deliveries.
-	if repo.repository.WebhookSecret == "" {
-		s.errorPage(w, r, 403, "Webhooks are disabled for this repository", "Set webhook_secret in the server configuration to accept deliveries, or leave poll_interval to find pushes.")
-		return
-	}
-	body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, 25<<20))
-	if err != nil {
-		s.errorPage(w, r, 400, "Invalid webhook body", err.Error())
-		return
-	}
-	signature, err := hex.DecodeString(strings.TrimPrefix(r.Header.Get("X-Hub-Signature-256"), "sha256="))
-	mac := hmac.New(sha256.New, []byte(repo.repository.WebhookSecret))
-	mac.Write(body)
-	if err != nil || !strings.HasPrefix(r.Header.Get("X-Hub-Signature-256"), "sha256=") || !hmac.Equal(signature, mac.Sum(nil)) {
-		s.errorPage(w, r, 401, "Invalid webhook signature", "Check the repository webhook secret.")
-		return
-	}
-	if r.Header.Get("X-GitHub-Event") != "push" {
-		w.WriteHeader(http.StatusNoContent)
-		return
-	}
-	var event struct {
-		Ref, After string
-		Deleted    bool
-	}
-	if err := json.Unmarshal(body, &event); err != nil || event.Ref == "" {
-		s.errorPage(w, r, 400, "Invalid push payload", "A push must declare its ref.")
-		return
-	}
-	if event.Deleted {
-		w.WriteHeader(http.StatusNoContent)
-		return
-	}
-	branch, _, err := resolveHead(r.Context(), repo.repository)
-	if err != nil {
-		s.errorPage(w, r, 502, "Default branch unavailable", err.Error())
-		return
-	}
-	if event.Ref != branch {
-		w.WriteHeader(http.StatusNoContent)
-		return
-	}
-	s.enqueue(repo, BuildEvent{ReceivedAt: time.Now().UTC(), PushedCommit: event.After})
-	w.WriteHeader(http.StatusAccepted)
 }
 
 func (s *Server) buildNow(w http.ResponseWriter, r *http.Request) {

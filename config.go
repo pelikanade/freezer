@@ -31,10 +31,9 @@ type Config struct {
 }
 
 type Repository struct {
-	Name          string `yaml:"name"`
-	URL           string `yaml:"url"`
-	GitHub        string `yaml:"github"`
-	WebhookSecret string `yaml:"webhook_secret"`
+	Name   string `yaml:"name"`
+	URL    string `yaml:"url"`
+	GitHub string `yaml:"github"`
 }
 
 type CacheConfig struct {
@@ -77,8 +76,8 @@ func LoadConfig(filename string) (Config, error) {
 	if cfg.GlobCap < 1 || cfg.JobTimeout <= 0 {
 		return cfg, fmt.Errorf("glob_cap and job_timeout must be positive")
 	}
-	if cfg.PollInterval < 0 {
-		return cfg, fmt.Errorf("poll_interval must not be negative")
+	if cfg.PollInterval <= 0 {
+		return cfg, fmt.Errorf("poll_interval must be positive: polling is the only trigger")
 	}
 	if cfg.Cache.Bucket == "" || strings.ContainsAny(cfg.Cache.Bucket, "/?#@:") {
 		return cfg, fmt.Errorf("cache.bucket must be one bucket name without a prefix")
@@ -123,9 +122,6 @@ func LoadConfig(filename string) (Config, error) {
 		if repo.URL == "" || !githubSlug.MatchString(repo.GitHub) {
 			return cfg, fmt.Errorf("repository %s requires url and github (owner/name)", repo.Name)
 		}
-		// An empty webhook_secret is allowed: it means this repository takes no
-		// deliveries at all, which is what a polling deployment wants. A non-empty
-		// value is the per-repository HMAC key (ADR 0013).
 	}
 	return cfg, nil
 }

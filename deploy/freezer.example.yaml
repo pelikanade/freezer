@@ -2,8 +2,8 @@
 #
 # The key reference is README.md, "Running the service". Mount this file at
 # /etc/freezer/freezer.yaml (see deploy/freezer.container). Keep it private: it
-# holds the per-repository webhook secrets, and it is ASCII YAML with no
-# environment interpolation — the credentials come from the environment file.
+# names the repositories this service publishes for, and it is ASCII YAML with
+# no environment interpolation — the credentials come from the environment file.
 
 # Inside the container: 0.0.0.0 so the published port reaches it.
 listen: 0.0.0.0:8080
@@ -17,9 +17,8 @@ glob_cap: 200
 job_timeout: 30m
 retention: 1000
 
-# Off when absent or 0: GitHub pushes reach the webhook route and the head is
-# never polled. Set a duration (10m, 1h) when the service is not publicly
-# reachable — polling needs no inbound route at all.
+# Required and positive: polling is the only trigger, and it needs no inbound
+# route at all. 10m to 1h is the usual range.
 poll_interval: 15m
 
 # The container's own address, used only for the commit status target URL.
@@ -39,4 +38,3 @@ repositories:
   - name: personal-flake
     url: https://github.com/OWNER/REPOSITORY.git
     github: OWNER/REPOSITORY
-    webhook_secret: REPLACE_WITH_A_RANDOM_SECRET

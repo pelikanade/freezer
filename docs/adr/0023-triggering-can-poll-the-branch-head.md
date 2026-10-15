@@ -1,5 +1,7 @@
 # Triggering can also poll the branch head
 
+**Absorbed by [ADR 0024](0024-triggering-is-polling-only.md):** polling is no longer an option beside a webhook — it is the only trigger, and the webhook route it was added next to is gone. Everything below about `poll_interval`, the idempotent event path and the queue rule still stands.
+
 ADR 0013 decided triggering was webhook-only and rejected a periodic sweep. That stands for a deployment GitHub can reach. It does not for one GitHub cannot reach: the webhook route is the *only* thing in this service that has to be publicly reachable, and keeping a whole host off the public internet is worth more to a single maintainer than the polling traffic a sweep costs.
 
 So: `poll_interval`, off when absent or zero. With it set, the server resolves every registered repository's default-branch head on that interval — at once when it starts, then every interval — and starts the same build event a delivered push would have started. The webhook route stays: it is not removed for a deployment that has both, and the two paths need no coordination, because the event path is idempotent — the last-built check ends any event whose head is already built.

@@ -1,3 +1,5 @@
+**Amended by [ADR 0024](0024-triggering-is-polling-only.md):** the trigger is a poll of the default-branch head rather than a webhook, so the HMAC step and the payload's branch check below no longer exist — the head is read from the remote, and there is no payload to distrust.
+
 # Only the default branch is built; fork PRs never are
 
 A job runs code on the host alongside the nix daemon, and anything it produces is published *signed under the server's own key* — which makes the server's published paths trusted by every consumer. A pull request from an untrusted author therefore does not merely consume build resources; it can inject attacker-chosen store paths into a trusted cache.

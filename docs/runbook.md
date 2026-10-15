@@ -1,6 +1,6 @@
 # Operating Freezer
 
-Freezer publishes trusted, public Nix store paths. Register only public repositories whose default-branch code you trust. The web UI has no authentication: protect it with the reverse proxy or bind to localhost and use an SSH tunnel. Only the signed webhook route needs public access.
+Freezer publishes trusted, public Nix store paths. Register only public repositories whose default-branch code you trust. The web UI has no authentication: protect it with the reverse proxy or bind to localhost and use an SSH tunnel. Nothing needs to be reachable from outside: triggering is polling (ADR 0024), so the whole service can stay on a private network.
 
 ## Deploy as a container
 
@@ -14,7 +14,7 @@ Everything the service writes lives under the deploying user's home, and the con
 
 ```sh
 mkdir -p ~/freezer/state
-cp deploy/freezer.example.yaml ~/freezer/freezer.yaml   # bucket, endpoint, repositories, webhook secrets
+cp deploy/freezer.example.yaml ~/freezer/freezer.yaml   # bucket, endpoint, repositories
 install -m 600 deploy/.env.example ~/freezer/.env       # then edit: GITHUB_TOKEN and the R2 credentials
 chmod 600 ~/freezer/freezer.yaml
 podman run --rm --entrypoint nix-store -v "$HOME/freezer:/keys" freezer:0.1.0 \
@@ -49,12 +49,7 @@ podman run --rm --name freezer -p 127.0.0.1:8080:8080 \
 
 `docker run` takes the same flags. The environment file is read by `--env-file` and is not mounted; only the configuration and the signing key are.
 
-**Triggering.** Two ways, and a private host uses the second:
-
-- **Polling.** Set `poll_interval` (10m is a reasonable start). The service then resolves every registered repository's default-branch head on that interval — at once at start, then every interval — and builds whenever the head is not the commit last built. Nothing inbound is needed: no public route, no webhook, no reverse-proxy vhost. The UI can stay on the private network or behind an SSH tunnel, and the whole deployment can be unreachable from the internet.
-- **Webhooks.** If GitHub can reach the service, register one per repository at `https://SERVICE/hooks/REPOSITORY_NAME` (push events, matching secret). Lower latency, at the cost of exposing that route. A repository with no `webhook_secret` in the configuration has no webhook route at all — every delivery is refused with 403 — so a polling-only deployment omits the field rather than leaving a weak one in place.
-
-Both may be set at once; they cannot double-build, because an event whose head is already built ends at the last-built check. A poll that cannot reach the remote shows up as a failed repository state in the UI and posts no commit status.
+**Triggering.** Polling only: `poll_interval` is required and positive. The service resolves every registered repository's default-branch head at start and on each interval afterwards, and builds whenever the head is not the commit last built. Nothing inbound is needed — no public route, no webhook, no reverse-proxy vhost — so the UI can stay on a private network or behind an SSH tunnel and the deployment can be unreachable from the internet. A poll that cannot reach the remote shows up as a failed repository state in the UI and posts no commit status. Ten minutes is a reasonable start; a poll costs one branch resolution per repository.
 
 **Runtime behavior.**
 
@@ -80,13 +75,12 @@ Use the server configuration in [README.md](../README.md#running-the-service). B
 
 | File / setting | Contents and access |
 |---|---|
-| Server YAML | Registered public repositories, per-repository webhook secrets, cache endpoint and signing-key filename. Mounted read-only at `/etc/freezer/freezer.yaml`; mode 0600 on the host. |
+| Server YAML | Registered public repositories, cache endpoint and signing-key filename. Mounted read-only at `/etc/freezer/freezer.yaml`; mode 0600 on the host. |
 | Signing key | An ed25519 binary-cache key, mode 0600, owned by the deploying user. Back it up separately. Freezer never reads its contents; Nix opens it when copying. |
 | Environment file (`.env`) | `GITHUB_TOKEN`, `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`; mode 0600, gitignored, from `deploy/.env.example`. The unit passes it with `EnvironmentFile=` (`--env-file` for `podman run`), so the values exist only in the container's environment. |
 | R2 bucket | One bucket, flat namespace. The S3 endpoint is `https://ACCOUNT_ID.r2.cloudflarestorage.com`; credentials need bucket read/write access. |
 | Public custom domain | Read-only access to that same bucket. This URL is the consumer substituter, not Freezer's HTTP address. |
-| GitHub webhook | Optional: push events to `https://SERVICE/hooks/REPOSITORY_NAME`, with the matching repository secret and HTTPS. Skip it and set `poll_interval` instead when the service is not publicly reachable. |
-| GitHub token | Permission to create commit statuses on every registered repository. Status context is `freezer`. |
+| GitHub token | Permission to create commit statuses on every registered repository. Status context is `freezer`; this is the only thing the service sends to GitHub. |
 
 Generate a new signing key only when setting up a new trust identity — in the container, as above, or anywhere Nix is installed:
 

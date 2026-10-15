@@ -1,6 +1,6 @@
 # Dependencies: a pure-Go SQLite driver and yaml.v3, and nothing else
 
-The standard library covers almost everything: `net/http` and `html/template` for the UI, `encoding/json` for webhook payloads and API responses, `crypto/hmac` for webhook verification, `os/exec` for git and nix, `bufio` and `os` for everything else. Exactly two non-standard dependencies are accepted:
+The standard library covers almost everything: `net/http` and `html/template` for the UI, `encoding/json` for API payloads, `os/exec` for git and nix, `bufio` and `os` for everything else. Exactly two non-standard dependencies are accepted:
 
 - **GORM** (`gorm.io/gorm`) with a pure-Go SQLite dialect (`github.com/glebarez/sqlite`) — no CGO, and its `AutoMigrate` replaces hand-written schema management;
 - `gopkg.in/yaml.v3`, for the server config and the repository build lists.
@@ -8,7 +8,7 @@ The standard library covers almost everything: `net/http` and `html/template` fo
 Deliberately absent, each for a specific reason:
 
 - **No AWS SDK.** All bucket access is nix's (ADR 0010), so there is no signing, no multipart, and no retry policy for us to own.
-- **No web framework or router.** `net/http`'s mux is enough for a handful of GET routes plus one webhook POST.
+- **No web framework or router.** `net/http`'s mux is enough for a handful of GET routes plus a few form POSTs.
 - **No git library.** Shelling out to `git fetch` is smaller than a Git implementation and matches how the server already talks to nix.
 
 ## Consequences

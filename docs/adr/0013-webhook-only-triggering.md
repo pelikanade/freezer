@@ -1,3 +1,5 @@
+**Superseded by [ADR 0024](0024-triggering-is-polling-only.md):** triggering is polling-only; the webhook route, the per-repository secret and the signature check are gone. [ADR 0023](0023-triggering-can-poll-the-branch-head.md) had already added polling beside the webhook, which is why the record below describes a path that no longer exists.
+
 # Triggering is webhook-only; there is no reconcile sweep
 
 A build starts when GitHub delivers a push webhook for a registered repository's default branch, which is resolved from the remote's `HEAD` symref through git (ADR 0004) after the signature is verified. There is no periodic comparison against the remote head, and no durable queue: events live in memory until they run (ADR 0019 settles what happens to events when several arrive for one repository).

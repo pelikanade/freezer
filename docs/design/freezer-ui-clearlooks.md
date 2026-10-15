@@ -264,7 +264,7 @@ Primary: CSS-only — wrap the transcript in a flex column-reverse scroller so t
 - Filters/search on the job list (paging only in v1).
 - Forging links into GitHub beyond showing `owner/name`.
 - Vendoring the Tango or Crystal **icon theme files**.
-- Changing nix / webhook / SQLite behaviour.
+- Changing nix / polling / SQLite behaviour.
 
 ---
 
@@ -274,7 +274,7 @@ Primary: CSS-only — wrap the transcript in a flex column-reverse scroller so t
 
 1. **Stop redirect:** Stop stays on the job page. `POST /jobs/{id}/stop` → `303` to `/jobs/{id}?notice=stop`.
 2. **Auto-refresh:** keep the no-JS `<meta refresh>` with the visible Pause link (`?refresh=0`). No scroll-restore script in v1.
-3. **Queued builds:** show them. Expose the build waiting for its turn per repo (read-only) so the index can show a "queued" row per repo (received time, plus the pushed sha if the event carries one; the head is still resolved through git at build start) above that repo's running job. A queued row is not a job row — give it its own status icon and the word "queued". Superseded events simply disappear (the slot holds only the newest).
+3. **Queued builds:** show them. Expose the build waiting for its turn per repo (read-only) so the index can show a "queued" row per repo (received time, plus the pushed sha if the event carries one; the head is still resolved through git at build start) above that repo's running job. With triggering by polling (ADR 0024) an event never carries one, so the row shows the received time and, for a manual event, that it is Build now. A queued row is not a job row — give it its own status icon and the word "queued". Superseded events simply disappear (the slot holds only the newest).
 4. **Paging:** the job list gets paging. Keep 100 (or fewer) per page; add Newer / Older links in the jobs treeview footer and statusbar (`/?page=N` or `?before={id}`; keyset on id preferred). Commit grouping applies within a page.
 5. **Transcript line numbers + error tint:** ship in v1. One element per line (≤2000); error lines (`error:` prefix, `failed with exit code`) get the red tint plus a non-colour marker (bold or ⚠ gutter) so colour isn't the only cue. The plain-text transcript link stays.
 6. **Titlebar:** keep the CSS Metacity-style title bar, as in the mock.

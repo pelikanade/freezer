@@ -12,4 +12,4 @@ The UI exposes write actions — build now, stop a build — unauthenticated, pr
 - There is no per-user audit trail, and the GitHub token used to post commit statuses is a single shared service credential.
 - Because there are no cookies, there is no CSRF story to get wrong — but also no session to revoke.
 - The binary has no subcommands and a single mode: it serves. Its only argument is the path of the config file (a mount in the container deployment supplies it), and the UI is the entire control surface — build now, stop, transcripts, job history. Anything the UI cannot do is a config edit and a restart.
-- With no CLI, an unreachable UI means the only manual trigger left is a push to the branch, which the webhook turns into a build. That is a small loss: shell access to the box no longer helps you start a build.
+- With no CLI, an unreachable UI means the only manual trigger left is a push to the branch, which the next poll turns into a build. That is a small loss: shell access to the box no longer helps you start a build.

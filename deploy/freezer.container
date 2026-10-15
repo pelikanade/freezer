@@ -12,15 +12,16 @@
 # container runs as the deploying user.
 
 [Unit]
-Description=Freezer: webhook-driven Nix builds published to a signed R2 cache
+Description=Freezer: poll-driven Nix builds published to a signed R2 cache
 Wants=network-online.target
 After=network-online.target
 
 [Container]
 Image=localhost/freezer:0.1.0
 ContainerName=freezer
-# The UI and the webhook are reached through a reverse proxy on the host; the
-# container is not exposed beyond loopback. GitHub needs the webhook route only.
+# The UI is reached through a reverse proxy on the host, or an SSH tunnel. The
+# container is not exposed beyond loopback, and nothing inbound is needed: it
+# finds pushes by polling the branch head.
 PublishPort=127.0.0.1:8080:8080
 # State (SQLite database, checkouts) must outlive the container.
 Volume=%h/freezer/state:/var/lib/freezer
