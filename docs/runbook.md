@@ -15,8 +15,8 @@ Everything the service writes lives under the deploying user's home, and the con
 ```sh
 mkdir -p ~/freezer/state
 cp deploy/freezer.example.yaml ~/freezer/freezer.yaml   # bucket, endpoint, repositories, webhook secrets
-cp deploy/freezer.example.env ~/freezer/freezer.env     # GITHUB_TOKEN and the R2 credentials
-chmod 600 ~/freezer/freezer.yaml ~/freezer/freezer.env
+install -m 600 deploy/.env.example ~/freezer/.env       # then edit: GITHUB_TOKEN and the R2 credentials
+chmod 600 ~/freezer/freezer.yaml
 podman run --rm --entrypoint nix-store -v "$HOME/freezer:/keys" freezer:0.1.0 \
   --generate-binary-cache-key freezer-cache-1 /keys/signing.key /keys/signing.pub
 ```
@@ -34,7 +34,7 @@ systemctl --user start freezer.service
 
 Quadlet generates `freezer.service` at `daemon-reload` and wires it into `default.target` itself, so there is nothing to `enable`: with lingering on, boot starts it.
 
-The unit mounts `~/freezer/freezer.yaml` and `~/freezer/signing.key` read-only, mounts `~/freezer/state` read-write, and reads `~/freezer/freezer.env` as the container's environment; it publishes the service on `127.0.0.1:8080` only, so the reverse proxy (or an SSH tunnel) remains the thing that faces the network. It also carries the health check, because Podman builds OCI-format images, which drop the image's own `HEALTHCHECK`. Two host-side requirements: enable lingering (`loginctl enable-linger "$USER"`, or `users.users.<name>.linger = true` on NixOS) so the service starts at boot without a login, and add `,Z` to the three `Volume=` options on a host that enforces SELinux.
+The unit mounts `~/freezer/freezer.yaml` and `~/freezer/signing.key` read-only, mounts `~/freezer/state` read-write, and reads `~/freezer/.env` (the deployment's dotenv file) as the container's environment; it publishes the service on `127.0.0.1:8080` only, so the reverse proxy (or an SSH tunnel) remains the thing that faces the network. It also carries the health check, because Podman builds OCI-format images, which drop the image's own `HEALTHCHECK`. Two host-side requirements: enable lingering (`loginctl enable-linger "$USER"`, or `users.users.<name>.linger = true` on NixOS) so the service starts at boot without a login, and add `,Z` to the three `Volume=` options on a host that enforces SELinux.
 
 Without systemd, the same container runs in the foreground:
 
@@ -43,7 +43,7 @@ podman run --rm --name freezer -p 127.0.0.1:8080:8080 \
   -v "$HOME/freezer/state:/var/lib/freezer" \
   -v "$HOME/freezer/freezer.yaml:/etc/freezer/freezer.yaml:ro" \
   -v "$HOME/freezer/signing.key:/etc/freezer/signing.key:ro" \
-  --env-file "$HOME/freezer/freezer.env" \
+  --env-file "$HOME/freezer/.env" \
   freezer:0.1.0
 ```
 
@@ -75,7 +75,7 @@ Use the server configuration in [README.md](../README.md#running-the-service). B
 |---|---|
 | Server YAML | Registered public repositories, per-repository webhook secrets, cache endpoint and signing-key filename. Mounted read-only at `/etc/freezer/freezer.yaml`; mode 0600 on the host. |
 | Signing key | An ed25519 binary-cache key, mode 0600, owned by the deploying user. Back it up separately. Freezer never reads its contents; Nix opens it when copying. |
-| Environment file | `GITHUB_TOKEN`, `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`; mode 0600. The unit passes it with `EnvironmentFile=` (`--env-file` for `podman run`), so the values exist only in the container's environment. |
+| Environment file (`.env`) | `GITHUB_TOKEN`, `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`; mode 0600, gitignored, from `deploy/.env.example`. The unit passes it with `EnvironmentFile=` (`--env-file` for `podman run`), so the values exist only in the container's environment. |
 | R2 bucket | One bucket, flat namespace. The S3 endpoint is `https://ACCOUNT_ID.r2.cloudflarestorage.com`; credentials need bucket read/write access. |
 | Public custom domain | Read-only access to that same bucket. This URL is the consumer substituter, not Freezer's HTTP address. |
 | GitHub webhook | Push events to `https://SERVICE/hooks/REPOSITORY_NAME`, with the matching repository secret and HTTPS. |

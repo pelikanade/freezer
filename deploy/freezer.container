@@ -28,7 +28,9 @@ Volume=%h/freezer/state:/var/lib/freezer
 Volume=%h/freezer/freezer.yaml:/etc/freezer/freezer.yaml:ro
 Volume=%h/freezer/signing.key:/etc/freezer/signing.key:ro
 # GITHUB_TOKEN, AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY (R2 credentials).
-EnvironmentFile=%h/freezer/freezer.env
+# The file is deploy/.env next to this unit's source, copied to the deployment
+# directory; deploy/.env.example is the template.
+EnvironmentFile=%h/freezer/.env
 
 # Podman builds OCI-format images, which drop the image's HEALTHCHECK, so the
 # unit carries the same check: the UI's home page.
