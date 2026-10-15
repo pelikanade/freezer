@@ -1,0 +1,46 @@
+# Freezer as a rootless Podman Quadlet unit.
+#
+#   install -d ~/.config/containers/systemd
+#   cp deploy/freezer.container ~/.config/containers/systemd/
+#   systemctl --user daemon-reload
+#   systemctl --user start freezer.service
+#
+# Quadlet generates the unit and wires it into default.target, so it is not
+# enabled by hand; with lingering enabled for this user, boot starts it.
+# The paths below are relative to the deploying user's home. Everything the
+# service writes lives under that home; nothing outside it is touched, and the
+# container runs as the deploying user.
+
+[Unit]
+Description=Freezer: webhook-driven Nix builds published to a signed R2 cache
+Wants=network-online.target
+After=network-online.target
+
+[Container]
+Image=localhost/freezer:0.1.0
+ContainerName=freezer
+# The UI and the webhook are reached through a reverse proxy on the host; the
+# container is not exposed beyond loopback. GitHub needs the webhook route only.
+PublishPort=127.0.0.1:8080:8080
+# State (SQLite database, checkouts) must outlive the container.
+Volume=%h/freezer/state:/var/lib/freezer
+# Server configuration and the signing key are read-only inside the container.
+Volume=%h/freezer/freezer.yaml:/etc/freezer/freezer.yaml:ro
+Volume=%h/freezer/signing.key:/etc/freezer/signing.key:ro
+# GITHUB_TOKEN, AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY (R2 credentials).
+EnvironmentFile=%h/freezer/freezer.env
+
+# Podman builds OCI-format images, which drop the image's HEALTHCHECK, so the
+# unit carries the same check: the UI's home page.
+HealthCmd=curl -fsS http://127.0.0.1:8080/ >/dev/null || exit 1
+HealthInterval=30s
+HealthStartPeriod=15s
+HealthTimeout=5s
+
+[Service]
+Restart=on-failure
+# Freezer shuts its HTTP server down within five seconds; give builds time to die.
+TimeoutStopSec=30
+
+[Install]
+WantedBy=default.target

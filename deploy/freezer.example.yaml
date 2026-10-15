@@ -1,0 +1,37 @@
+# Freezer server configuration for the container deployment.
+#
+# The key reference is README.md, "Running the service". Mount this file at
+# /etc/freezer/freezer.yaml (see deploy/freezer.container). Keep it private: it
+# holds the per-repository webhook secrets, and it is ASCII YAML with no
+# environment interpolation — the credentials come from the environment file.
+
+# Inside the container: 0.0.0.0 so the published port reaches it.
+listen: 0.0.0.0:8080
+
+# Bind-mounted state directory (deploy/freezer.container mounts the host's
+# ~/freezer/state here).
+state_dir: /var/lib/freezer
+
+global_build_cap: 2
+glob_cap: 200
+job_timeout: 30m
+retention: 1000
+
+# The container's own address, used only for the commit status target URL.
+public_url: https://freezer.example.com
+
+cache:
+  # One R2 bucket, flat namespace, reached through the S3 API endpoint. The
+  # custom domain that consumers use is a separate, read-only mapping of the
+  # same bucket and is never configured here.
+  bucket: freezer-cache
+  # R2: https://<ACCOUNT_ID>.r2.cloudflarestorage.com
+  endpoint: https://ACCOUNT_ID.r2.cloudflarestorage.com
+  # Mounted read-only; Nix opens it when copying, freezer never reads it.
+  signing_key: /etc/freezer/signing.key
+
+repositories:
+  - name: personal-flake
+    url: https://github.com/OWNER/REPOSITORY.git
+    github: OWNER/REPOSITORY
+    webhook_secret: REPLACE_WITH_A_RANDOM_SECRET

@@ -2,7 +2,7 @@
 
 A self-hosted, webhook-driven build service for nix flakes. It publishes built store paths to a public, signed, S3-compatible binary cache (Cloudflare R2), so consumers substitute them instead of rebuilding.
 
-Status: implementation complete through the local v2 deliverables: build loop, service, Clearlooks UI, retention, flake package, NixOS module and repair runbook. Real-host/R2 acceptance remains pending; see [ROADMAP.md](ROADMAP.md) and the [runbook](docs/runbook.md).
+Status: implementation complete through the local v2 deliverables: build loop, service, Clearlooks UI, retention, flake package, container image and repair runbook. Real-host/R2 acceptance remains pending; see [ROADMAP.md](ROADMAP.md) and the [runbook](docs/runbook.md).
 
 ## Problem
 
@@ -22,7 +22,7 @@ It is for one admin running it on their own host for their own public repositori
 **External pieces**
 
 - **GitHub**: push webhooks in, commit statuses out (one shared service token).
-- **The host's nix daemon** (≥ 2.33): does all building, publishing, and cache probing.
+- **Nix** (≥ 2.33): does all building, publishing, and cache probing. The container image carries it; running the binary directly uses the host's daemon.
 - **The S3-compatible bucket** (R2), read publicly through a custom domain. Freezer never serves the cache itself.
 - **A reverse proxy** (or an SSH tunnel to a localhost bind) in front of the UI. It provides TLS and access control.
 
@@ -89,12 +89,19 @@ Nix invocations separate options from paths with `--` and preserve evaluated pat
 
 ## Running the service
 
-Build with `devenv shell -- go build -o .devenv/freezer .`, then run `.devenv/freezer /path/to/server.yaml`. The binary has one mode and takes only the configuration filename. Bind to localhost behind an authenticated reverse proxy or SSH tunnel. Expose only `/hooks/<name>` to GitHub, configured for push events and the matching per-repository secret.
+The deployment route is one container under rootless Podman:
 
-For the packaged executable, run `nix build` and then `./result/bin/freezer /path/to/server.yaml`. The flake exports `packages.<system>.default` and `nixosModules.default`; [the runbook](docs/runbook.md#install-with-nixos) covers module configuration, secret files, public-domain substitution, self-hosting, retention and repair. Nix 2.34 is tested; use at least 2.33.6 for the backported path-addressing option if using Nix 2.33.
+```sh
+podman build -t freezer:0.1.0 .
+```
+
+The image carries Nix 2.34.8, git and curl, so the host needs no Nix of its own, and the service drives the Nix inside the container. `deploy/` holds the Quadlet unit and example configuration and environment files; [the runbook](docs/runbook.md#deploy-as-a-container) covers the image, secrets, the unit, R2, public-domain substitution, self-hosting, retention and repair.
+
+Running the binary directly is also supported: `devenv shell -- go build -o .devenv/freezer .`, or `nix build` and then `./result/bin/freezer /path/to/server.yaml` (`packages.<system>.default`). That route uses the host's Nix, so the host's daemon must be at least 2.33 (2.34 tested); use at least 2.33.6 for the backported path-addressing option when selecting the 2.33 series. The binary has one mode and takes only the configuration filename. Bind to localhost behind an authenticated reverse proxy or SSH tunnel. Expose only `/hooks/<name>` to GitHub, configured for push events and the matching per-repository secret.
 
 ```yaml
-listen: 127.0.0.1:8080
+# Container deployments must listen on 0.0.0.0; the binary route binds loopback.
+listen: 0.0.0.0:8080
 state_dir: /var/lib/freezer
 global_build_cap: 2
 glob_cap: 200
@@ -104,7 +111,7 @@ public_url: https://freezer.example.com
 cache:
   bucket: public-nix-cache
   endpoint: https://ACCOUNT_ID.r2.cloudflarestorage.com
-  signing_key: /run/secrets/freezer-signing-key
+  signing_key: /etc/freezer/signing.key
 repositories:
   - name: personal-flake
     url: https://github.com/OWNER/REPOSITORY.git

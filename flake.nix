@@ -16,6 +16,5 @@
         });
 
       checks = forSystems (system: { package = self.packages.${system}.freezer; });
-      nixosModules.default = import ./nix/module.nix { inherit self; };
     };
 }
