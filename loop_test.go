@@ -102,7 +102,7 @@ func (f fixture) out(t *testing.T, name string) string {
 
 func TestExactEntryPublishes(t *testing.T) {
 	f := newFixture(t)
-	data := fmt.Sprintf("cache:\n  bucket: %s\n  endpoint: %s\n  signing_key: %s\nglob_cap: 200\njob_timeout: 1m\n", f.bucket, f.endpoint, f.key)
+	data := fmt.Sprintf("cache:\n  bucket: %s\n  endpoint: %s\n  signing_key: %s\nglob_cap: 200\njob_timeout: 1m\npoll_interval: 15m\n", f.bucket, f.endpoint, f.key)
 	configPath := filepath.Join(f.dir, "server.yaml")
 	if err := os.WriteFile(configPath, []byte(data), 0600); err != nil {
 		t.Fatal(err)
