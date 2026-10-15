@@ -10,64 +10,43 @@ One container under rootless Podman, with no Nix on the host. The image is built
 podman build -t freezer:0.1.0 .
 ```
 
-Everything the service writes lives under the deploying user's home, and the container runs as that user. Prepare it:
+Everything the service writes lives under the deploying user's home, and the container runs as that user. Prepare the deployment directory and bring the project up:
 
 ```sh
 mkdir -p ~/freezer/state
 cp deploy/freezer.example.yaml ~/freezer/freezer.yaml   # bucket, endpoint, repositories
 install -m 600 deploy/.env.example ~/freezer/.env       # then edit: GITHUB_TOKEN and the R2 credentials
 chmod 600 ~/freezer/freezer.yaml
+cp deploy/compose.yaml ~/freezer/compose.yaml
 podman run --rm --entrypoint nix-store -v "$HOME/freezer:/keys" freezer:0.1.0 \
   --generate-binary-cache-key freezer-cache-1 /keys/signing.key /keys/signing.pub
+podman compose -f ~/freezer/compose.yaml up -d
 ```
 
-The configuration must set `listen: 0.0.0.0:8080` and `state_dir: /var/lib/freezer`, and must name the signing key where the container sees it — `/etc/freezer/signing.key` in `deploy/freezer.container`. Its keys are the ones in [README.md](../README.md#running-the-service); `deploy/freezer.example.yaml` is a working starting point. `~/freezer/signing.key` is the only copy of the private key: back it up, and hand only `signing.pub` to consumers.
+`deploy/compose.yaml` is the whole deployment, pinned in one file: the image tag, the loopback port, the three bind mounts, the environment file, the health check, `restart: always`, and the two sandbox settings below. Every path in it is relative, which is why the file belongs in `~/freezer/` beside the configuration, the key and the state directory. `docker compose` reads the same file.
 
-Register the unit with Podman's Quadlet, as a user service:
+The configuration must set `listen: 0.0.0.0:8080` and `state_dir: /var/lib/freezer`, and must name the signing key where the container sees it — `/etc/freezer/signing.key`. Its keys are the ones in [README.md](../README.md#running-the-service); `deploy/freezer.example.yaml` is a working starting point. `~/freezer/signing.key` is the only copy of the private key: back it up, and hand only `signing.pub` to consumers.
 
-```sh
-install -d ~/.config/containers/systemd
-install -m 644 deploy/freezer.container ~/.config/containers/systemd/freezer.container
-systemctl --user daemon-reload
-systemctl --user start freezer.service
-```
-
-Quadlet generates `freezer.service` at `daemon-reload` and wires it into `default.target` itself, so there is nothing to `enable`: with lingering on, boot starts it.
-
-The unit mounts `~/freezer/freezer.yaml` and `~/freezer/signing.key` read-only, mounts `~/freezer/state` read-write, and reads `~/freezer/.env` (the deployment's dotenv file) as the container's environment; it publishes the service on `127.0.0.1:8080` only, so the reverse proxy (or an SSH tunnel) remains the thing that faces the network. It also carries the health check, because Podman builds OCI-format images, which drop the image's own `HEALTHCHECK`. Two host-side requirements: enable lingering (`loginctl enable-linger "$USER"`, or `users.users.<name>.linger = true` on NixOS) so the service starts at boot without a login, and add `,Z` to the three `Volume=` options on a host that enforces SELinux.
-
-Without systemd, the same container runs in the foreground:
-
-```sh
-podman run --rm --name freezer -p 127.0.0.1:8080:8080 \
-  -v "$HOME/freezer/state:/var/lib/freezer" \
-  -v "$HOME/freezer/freezer.yaml:/etc/freezer/freezer.yaml:ro" \
-  -v "$HOME/freezer/signing.key:/etc/freezer/signing.key:ro" \
-  --env-file "$HOME/freezer/.env" \
-  freezer:0.1.0
-```
-
-`docker run` takes the same flags. The environment file is read by `--env-file` and is not mounted; only the configuration and the signing key are.
+**Boot and crashes.** `restart: always` restarts the container whenever it dies, and a deliberate `podman compose stop` stays stopped. To bring it back after a reboot, enable the user unit that re-runs containers carrying a restart policy: `systemctl --user enable --now podman-restart.service`, together with lingering (`loginctl enable-linger "$USER"`, or `users.users.<name>.linger = true` on NixOS) so it runs without a login. On a host that enforces SELinux, add `,Z` to the three volume options in the compose file.
 
 **Triggering.** Polling only: `poll_interval` is required and positive. The service resolves every registered repository's default-branch head at start and on each interval afterwards, and builds whenever the head is not the commit last built. Nothing inbound is needed — no public route, no webhook, no reverse-proxy vhost — so the UI can stay on a private network or behind an SSH tunnel and the deployment can be unreachable from the internet. A poll that cannot reach the remote shows up as a failed repository state in the UI and posts no commit status. Ten minutes is a reasonable start; a poll costs one branch resolution per repository.
 
 **Runtime behavior.**
 
-- The container's Nix store is its writable layer: it survives stop, start and reboot of the same container, and is discarded when the container is recreated (a new image, or an edited unit). R2 holds the published paths, so a discarded store costs rebuild time on the next push, never re-publication, and nothing else is lost. `state_dir` is the bind mount and does survive recreation.
-- Builds are sandboxed: the image sets `sandbox = true`. Rootless Podman is enough — the container's root holds the namespace capabilities a sandbox needs, and Podman's default seccomp profile permits the syscalls (`clone`, `unshare`, `mount`, `pivot_root`). `sandbox-fallback = false` is also set, so a runtime that *cannot* sandbox fails each build with Nix's error ("this system does not support the kernel namespaces that are required for sandboxing") instead of quietly building without one. The escape hatch is a `nix.conf` mounted at `/etc/nix/nix.conf` with `sandbox = false`, and it is a poor one: without a sandbox, Nix requires `/homeless-shelter` — the `HOME` it gives builders — to not exist, and a builder that writes into its home directory creates it, after which *every later build in that container* fails with "home directory /homeless-shelter exists; please remove it". Removing that directory is the recovery (`podman exec freezer rm -rf /homeless-shelter`). Disabling the sandbox also removes it from the trust story: a build then runs with the container's environment, which holds the R2 credentials and the GitHub token.
+- The container's Nix store is its writable layer: it survives stop, start and reboot of the same container, and is discarded when the container is recreated (a new image tag, or an edited compose file). R2 holds the published paths, so a discarded store costs rebuild time on the next push, never re-publication, and nothing else is lost. `state_dir` is the bind mount and does survive recreation.
+- Builds are sandboxed: the image sets `sandbox = true`, and the compose file hands the container the two things Nix's sandbox needs — `cap_add: [SYS_ADMIN]` and `security_opt: [unmask=ALL]`. **Neither is optional, and a stock container has neither.** Podman drops `CAP_SYS_ADMIN` from the container's capability set, so without it Nix cannot create the mount, PID and UTS namespaces a build runs in; and Nix probes the sandbox by *remounting `/proc`*, which the kernel refuses while Podman has paths masked inside it, so the probe fails on a default container even with the capability added. Both failures look identical — every build stops with "this system does not support the kernel namespaces that are required for sandboxing" — because `sandbox-fallback = false` is set in the image. That is the deliberate trade: loud, not silent. The escape hatch is a `nix.conf` mounted at `/etc/nix/nix.conf` with `sandbox = false`, and it is a poor one: without a sandbox, Nix requires `/homeless-shelter` — the `HOME` it gives builders — to not exist, and a builder that writes into its home directory creates it, after which *every later build in that container* fails with "home directory /homeless-shelter exists; please remove it". Removing that directory is the recovery (`podman exec freezer rm -rf /homeless-shelter`). Disabling the sandbox also removes it from the trust story: a build then runs with the container's environment, which holds the R2 credentials and the GitHub token.
 - Build users: the image sets an empty `build-users-group`, so there is one single-user store inside the container and builds run as the container's user inside the sandbox. Nothing depends on the deploying host's subuid range beyond the mapping rootless Podman already requires, and no build user exists to be mapped.
 - Nix 2.34.8 is pinned in the image, so the 2.33 floor (ADR 0017) holds by construction. A hand-built image is on its own.
 
 Inspect and operate:
 
 ```sh
-systemctl --user status freezer
-journalctl --user -u freezer --since today
-podman ps --filter name=freezer
+podman compose -f ~/freezer/compose.yaml ps
+podman logs freezer
 podman healthcheck run freezer
 ```
 
-Upgrades are a rebuild and a restart: build the new tag, update `Image=` in the unit, `systemctl --user daemon-reload`, `systemctl --user restart freezer`. `Restart=on-failure` with `RestartSec=5` restarts a crashed service without hammering, and leaves a deliberate stop stopped; `TimeoutStopSec=30` lets a running build die while Freezer itself closes its listener within five seconds and recovers interrupted jobs at the next start.
+Upgrades are a rebuild and a recreate: build the new tag (`podman build -t freezer:0.2.0 .`), point `image:` at it in `~/freezer/compose.yaml`, and run `podman compose -f ~/freezer/compose.yaml up -d` again. Compose recreates the container — which discards the container's own Nix store, the trade noted above, while `state_dir` is a bind mount and survives — and `restart: always` keeps it up.
 
 ## Runtime files and external services
 
@@ -77,7 +56,7 @@ Use the server configuration in [README.md](../README.md#running-the-service). B
 |---|---|
 | Server YAML | Registered public repositories, cache endpoint and signing-key filename. Mounted read-only at `/etc/freezer/freezer.yaml`; mode 0600 on the host. |
 | Signing key | An ed25519 binary-cache key, mode 0600, owned by the deploying user. Back it up separately. Freezer never reads its contents; Nix opens it when copying. |
-| Environment file (`.env`) | `GITHUB_TOKEN`, `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`; mode 0600, gitignored, from `deploy/.env.example`. The unit passes it with `EnvironmentFile=` (`--env-file` for `podman run`), so the values exist only in the container's environment. |
+| Environment file (`.env`) | `GITHUB_TOKEN`, `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`; mode 0600, gitignored, from `deploy/.env.example`. Compose passes it with `env_file`, so the values exist only in the container's environment. |
 | R2 bucket | One bucket, flat namespace. The S3 endpoint is `https://ACCOUNT_ID.r2.cloudflarestorage.com`; credentials need bucket read/write access. |
 | Public custom domain | Read-only access to that same bucket. This URL is the consumer substituter, not Freezer's HTTP address. |
 | GitHub token | Permission to create commit statuses on every registered repository. Status context is `freezer`; this is the only thing the service sends to GitHub. |
@@ -89,7 +68,7 @@ umask 077
 nix-store --generate-binary-cache-key freezer-cache-1 ./freezer-cache.key ./freezer-cache.pub
 ```
 
-Keep the private file where the unit mounts it (`~/freezer/signing.key`) and nowhere else. Distribute only `freezer-cache.pub` to consumers. Never put either private credentials or the signing key into a flake expression, source commit or database.
+Keep the private file where the compose file mounts it (`~/freezer/signing.key`) and nowhere else. Distribute only `freezer-cache.pub` to consumers. Never put either private credentials or the signing key into a flake expression, source commit or database.
 
 Cloudflare's public-domain setup is documented at [R2 public buckets](https://developers.cloudflare.com/r2/buckets/public-buckets/#custom-domains). Freezer does not serve the bucket or manage its domain. Configure consumer Nix with the public URL in `extra-substituters` and the public key in `extra-trusted-public-keys`.
 
@@ -143,7 +122,7 @@ After one successful publication, verify a cache-hit event with a subsequent def
 
 `retention` keeps the newest N jobs per repository. Startup applies it to every recorded repository; each finished event applies it to that repository. Running jobs are never deleted. Job rows and full transcripts disappear together; last-built state does not. Lowering the setting and restarting is sufficient to apply a smaller history bound.
 
-Stop the service for a file-copy backup (`systemctl --user stop freezer`), or use SQLite's online backup mechanism. Copying only `freezer.sqlite` while WAL writes are active is not a valid file-copy backup; use the backup API or stop the service so the WAL is checkpointed. Back up the signing key separately. Checkouts and the container's Nix store are not retained or garbage-collected by Freezer.
+Stop the service for a file-copy backup (`podman compose -f ~/freezer/compose.yaml stop`), or use SQLite's online backup mechanism. Copying only `freezer.sqlite` while WAL writes are active is not a valid file-copy backup; use the backup API or stop the service so the WAL is checkpointed. Back up the signing key separately. Checkouts and the container's Nix store are not retained or garbage-collected by Freezer.
 
 SQLite deletion reuses pages but does not shrink the database file. An admin may run `VACUUM` during a maintenance window after taking a backup. Do not mistake a constant file size for failed retention: check that the old job page and `/jobs/ID/log` both return 404 while the newest jobs remain readable.
 

@@ -1,0 +1,45 @@
+# Freezer as one rootless Podman container, with the whole deployment pinned in
+# this file.
+#
+#   install -d ~/freezer/state
+#   install -m 600 deploy/.env.example ~/freezer/.env        # then edit
+#   cp deploy/freezer.example.yaml ~/freezer/freezer.yaml    # then edit
+#   cp deploy/compose.yaml ~/freezer/compose.yaml
+#   podman compose -f ~/freezer/compose.yaml up -d
+#
+# Every path below is relative to this file, so the deployment directory holds
+# the compose file, the server config, the environment file, the signing key and
+# the state directory side by side. `docker compose` accepts the same file.
+
+services:
+  freezer:
+    # The tag is the pin: build it with `podman build -t freezer:0.1.0 .` and
+    # change it here when a new image is deployed.
+    image: localhost/freezer:0.1.0
+    container_name: freezer
+    restart: always
+    ports:
+      # Loopback only. The UI is reached through a reverse proxy or an SSH
+      # tunnel, and nothing inbound is needed: Freezer polls the branch head.
+      - 127.0.0.1:8080:8080
+    volumes:
+      - ./state:/var/lib/freezer
+      - ./freezer.yaml:/etc/freezer/freezer.yaml:ro
+      - ./signing.key:/etc/freezer/signing.key:ro
+    env_file:
+      - ./.env
+    # Nix's sandbox needs both of these, and with sandbox-fallback = false in the
+    # image it fails every build without them:
+    #   * CAP_SYS_ADMIN, which Podman drops from the container's capability set,
+    #     for the mount, PID and UTS namespaces a build runs in;
+    #   * an unmasked /proc, because Nix probes the sandbox by remounting /proc
+    #     and the kernel refuses that while Podman has paths masked inside it.
+    cap_add:
+      - SYS_ADMIN
+    security_opt:
+      - unmask=ALL
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8080/"]
+      interval: 30s
+      timeout: 5s
+      start_period: 15s

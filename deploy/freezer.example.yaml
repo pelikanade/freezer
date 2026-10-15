@@ -1,14 +1,14 @@
 # Freezer server configuration for the container deployment.
 #
 # The key reference is README.md, "Running the service". Mount this file at
-# /etc/freezer/freezer.yaml (see deploy/freezer.container). Keep it private: it
+# /etc/freezer/freezer.yaml (see deploy/compose.yaml). Keep it private: it
 # names the repositories this service publishes for, and it is ASCII YAML with
 # no environment interpolation — the credentials come from the environment file.
 
 # Inside the container: 0.0.0.0 so the published port reaches it.
 listen: 0.0.0.0:8080
 
-# Bind-mounted state directory (deploy/freezer.container mounts the host's
+# Bind-mounted state directory (deploy/compose.yaml mounts the host's
 # ~/freezer/state here).
 state_dir: /var/lib/freezer
 
