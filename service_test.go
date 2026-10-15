@@ -37,7 +37,20 @@ var binaryOnce sync.Once
 var serviceBinary string
 var binaryError error
 
+// fixtureRepository is the repository list the service tests start with: one
+// registered repository whose webhook secret is "fixture-secret".
+const fixtureRepository = "\nrepositories:\n  - name: demo\n    url: %s\n    github: owner/demo\n    webhook_secret: fixture-secret\n"
+
 func newService(t *testing.T, entries ...string) *serviceFixture {
+	t.Helper()
+	return newServiceWith(t, "", fixtureRepository, entries...)
+}
+
+// newServiceWith starts the service with extraConfig inserted into the generated
+// configuration and repositoryBlock as its repository list, for the tests that
+// need a setting or a repository shape the others do not. repositoryBlock must
+// take the repository path as its one formatting argument.
+func newServiceWith(t *testing.T, extraConfig, repositoryBlock string, entries ...string) *serviceFixture {
 	t.Helper()
 	f := newFixture(t)
 	if len(entries) > 0 {
@@ -85,7 +98,7 @@ func newService(t *testing.T, entries ...string) *serviceFixture {
 	listener.Close()
 	s.url = "http://" + address
 	s.configPath = filepath.Join(f.dir, "server.yaml")
-	config := fmt.Sprintf("listen: %s\nstate_dir: %s\ngithub_api_base: %s\ngithub_token: fixture-token\nglobal_build_cap: 2\njob_timeout: 1m\ncache:\n  bucket: %s\n  endpoint: %s\n  signing_key: %s\nrepositories:\n  - name: demo\n    url: %s\n    github: owner/demo\n    webhook_secret: fixture-secret\n", address, filepath.Join(f.dir, "state"), api.URL, f.bucket, f.endpoint, f.key, f.repo())
+	config := fmt.Sprintf("listen: %s\nstate_dir: %s\ngithub_api_base: %s\ngithub_token: fixture-token\nglobal_build_cap: 2\njob_timeout: 1m\n%scache:\n  bucket: %s\n  endpoint: %s\n  signing_key: %s"+repositoryBlock, address, filepath.Join(f.dir, "state"), api.URL, extraConfig, f.bucket, f.endpoint, f.key, f.repo())
 	if err := os.WriteFile(s.configPath, []byte(config), 0600); err != nil {
 		t.Fatal(err)
 	}
@@ -194,6 +207,76 @@ func (s *serviceFixture) nextStatus(t *testing.T, want string) statusRequest {
 		_, page := s.get(t, "/")
 		t.Fatalf("timed out waiting for %s status\n%s", want, page)
 		return statusRequest{}
+	}
+}
+
+// Polling is the trigger path for a deployment GitHub cannot reach: the head is
+// resolved on the interval, with no webhook delivered and no signature checked.
+func TestPollingBuildsWithoutAWebhook(t *testing.T) {
+	s := newServiceWith(t, "poll_interval: 2s\n", fixtureRepository)
+	pending := s.nextStatus(t, "pending")
+	success := s.nextStatus(t, "success")
+	head := command(t, s.repo(), "git", "rev-parse", "HEAD")
+	if pending.Path != "/repos/owner/demo/statuses/"+head || success.Path != pending.Path {
+		t.Fatalf("polled statuses name the wrong commit: %+v %+v", pending, success)
+	}
+	if code, page := s.get(t, "/jobs/1"); code != 200 || !strings.Contains(page, "succeeded") {
+		t.Fatalf("the polled job is not recorded as succeeded: %d\n%s", code, page)
+	}
+}
+
+// The last-built check is what keeps polling civil: an unchanged head ends every
+// later event without a job and without a commit status.
+func TestPollingLeavesAnUnchangedHeadAlone(t *testing.T) {
+	s := newServiceWith(t, "poll_interval: 1s\n", fixtureRepository)
+	s.nextStatus(t, "pending")
+	s.nextStatus(t, "success")
+	time.Sleep(3 * time.Second)
+	select {
+	case status := <-s.statuses:
+		t.Fatalf("an unchanged head produced another commit status: %+v", status)
+	default:
+	}
+	if code, _ := s.get(t, "/jobs/2"); code != 404 {
+		t.Fatalf("an unchanged head produced a second job: %d", code)
+	}
+}
+
+// A repository with no webhook secret has no webhook route: an empty HMAC key
+// would make every signature forgeable, so a polling deployment omits the secret
+// and deliveries are refused rather than trusted.
+func TestRepositoryWithoutASecretRejectsDeliveries(t *testing.T) {
+	const noSecret = "\nrepositories:\n  - name: demo\n    url: %s\n    github: owner/demo\n"
+	s := newServiceWith(t, "", noSecret)
+	// The signature is computed with the empty key, so without the guard this
+	// delivery would pass verification and start a job.
+	if code := s.push(t, "refs/heads/trunk", ""); code != 403 {
+		t.Fatalf("a repository without a secret accepted a delivery: %d", code)
+	}
+	if code, _ := s.get(t, "/jobs/1"); code != 404 {
+		t.Fatalf("a refused delivery produced a job: %d", code)
+	}
+}
+
+// A waiting Build now keeps its place. An ordinary event must not replace it, or
+// the repair path would silently degrade into a probe run — which is why polling
+// did not simply reuse "a newer event replaces the waiting one" (ADR 0023).
+func TestQueuedBuildNowIsNotSuperseded(t *testing.T) {
+	s := newService(t, "packages.@system@.slow", "packages.@system@.hello")
+	s.push(t, "refs/heads/trunk", "fixture-secret")
+	s.nextStatus(t, "pending")
+	// The fast entry publishes while the slow one keeps the event running, so a
+	// later ordinary event for the same head would be a cache hit.
+	s.waitPage(t, "/jobs/2", "succeeded")
+	s.post(t, "/build/demo", "/?notice=build&repo=demo")
+	s.push(t, "refs/heads/trunk", "fixture-secret")
+	s.waitPage(t, "/", "queued")
+	s.post(t, "/jobs/1/stop", "/jobs/1?notice=stop")
+	s.nextStatus(t, "error")
+	s.nextStatus(t, "pending")
+	page := s.waitPage(t, "/jobs/4", "succeeded")
+	if strings.Contains(page, "cached — nothing built") {
+		t.Fatalf("the waiting Build now was replaced by an ordinary event:\n%s", page)
 	}
 }
 

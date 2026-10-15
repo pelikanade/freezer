@@ -76,7 +76,30 @@ func NewServer(cfg Config) (*Server, error) {
 		s.wg.Add(1)
 		go s.runRepository(repo)
 	}
+	if cfg.PollInterval > 0 {
+		s.wg.Add(1)
+		go s.pollRepositories()
+	}
 	return s, nil
+}
+
+// pollRepositories resolves every registered repository's default-branch head on
+// the configured interval, starting at once, so a deployment GitHub cannot reach
+// still builds pushes. Nothing else changes: an unchanged head stops at the
+// last-built check without touching the commit status, and a changed one runs
+// exactly the event a delivered push would have started.
+func (s *Server) pollRepositories() {
+	defer s.wg.Done()
+	for {
+		for _, repo := range s.repos {
+			s.enqueue(repo, BuildEvent{ReceivedAt: time.Now().UTC()})
+		}
+		select {
+		case <-s.ctx.Done():
+			return
+		case <-time.After(s.cfg.PollInterval):
+		}
+	}
 }
 
 func (s *Server) Close() {
@@ -87,9 +110,16 @@ func (s *Server) Close() {
 	}
 }
 
+// enqueue puts an event in the repository's queue, where a newer event replaces
+// the waiting one — except that a non-forced event never displaces a waiting
+// Build now. A poll tick must not turn the repair path into an ordinary event,
+// and Build now resolves the branch head when it runs anyway, so it covers the
+// push that would have replaced it.
 func (s *Server) enqueue(repo *repositoryRun, event BuildEvent) {
 	s.mu.Lock()
-	repo.queued = &event
+	if repo.queued == nil || event.Force || !repo.queued.Force {
+		repo.queued = &event
+	}
 	s.mu.Unlock()
 	select {
 	case repo.wake <- struct{}{}:
@@ -329,6 +359,12 @@ func (s *Server) webhook(w http.ResponseWriter, r *http.Request) {
 	repo := s.repos[r.PathValue("repo")]
 	if repo == nil {
 		s.errorPage(w, r, 404, "Repository not registered", "Register it in the server configuration.")
+		return
+	}
+	// A repository without a secret has no webhook route: an empty key would make
+	// every signature forgeable, and a deployment that polls needs no deliveries.
+	if repo.repository.WebhookSecret == "" {
+		s.errorPage(w, r, 403, "Webhooks are disabled for this repository", "Set webhook_secret in the server configuration to accept deliveries, or leave poll_interval to find pushes.")
 		return
 	}
 	body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, 25<<20))

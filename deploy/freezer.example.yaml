@@ -17,6 +17,11 @@ glob_cap: 200
 job_timeout: 30m
 retention: 1000
 
+# Off when absent or 0: GitHub pushes reach the webhook route and the head is
+# never polled. Set a duration (10m, 1h) when the service is not publicly
+# reachable — polling needs no inbound route at all.
+poll_interval: 15m
+
 # The container's own address, used only for the commit status target URL.
 public_url: https://freezer.example.com
 

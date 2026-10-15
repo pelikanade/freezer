@@ -3,7 +3,7 @@
 Scheduling, which no earlier document decided:
 
 - **One event per repository runs at a time.** Jobs inside an event run concurrently, bounded by a global cap (config); different repositories may run simultaneously.
-- **A newer event for a repository supersedes queued, not yet started events for that repository.** Rapid pushes cost one build of the newest commit, not one per push. A running event is not cancelled by a newer one: it finishes, and the newer commit is built afterwards — the reconcile-free equivalent of keeping up with the branch head.
+- **A newer event for a repository supersedes queued, not yet started events for that repository.** Rapid pushes cost one build of the newest commit, not one per push. A running event is not cancelled by a newer one: it finishes, and the newer commit is built afterwards — the reconcile-free equivalent of keeping up with the branch head. The one exception is a waiting Build now, which no non-forced event displaces: the repair path must not be degraded into a probe by a poll tick (ADR 0023).
 - **The recorded last-built commit de-duplicates redelivered webhooks.** An event whose commit equals the recorded one, and whose previous run succeeded, is dropped without touching the commit status.
 - **Events are an in-memory list, not a durable queue.** After a restart nothing is pending (ADR 0013).
 

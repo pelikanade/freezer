@@ -20,6 +20,7 @@ type Config struct {
 	GlobCap        int           `yaml:"glob_cap"`
 	JobTimeout     time.Duration `yaml:"job_timeout"`
 	Listen         string        `yaml:"listen"`
+	PollInterval   time.Duration `yaml:"poll_interval"`
 	StateDir       string        `yaml:"state_dir"`
 	GlobalBuildCap int           `yaml:"global_build_cap"`
 	Retention      int           `yaml:"retention"`
@@ -76,6 +77,9 @@ func LoadConfig(filename string) (Config, error) {
 	if cfg.GlobCap < 1 || cfg.JobTimeout <= 0 {
 		return cfg, fmt.Errorf("glob_cap and job_timeout must be positive")
 	}
+	if cfg.PollInterval < 0 {
+		return cfg, fmt.Errorf("poll_interval must not be negative")
+	}
 	if cfg.Cache.Bucket == "" || strings.ContainsAny(cfg.Cache.Bucket, "/?#@:") {
 		return cfg, fmt.Errorf("cache.bucket must be one bucket name without a prefix")
 	}
@@ -116,9 +120,12 @@ func LoadConfig(filename string) (Config, error) {
 			return cfg, fmt.Errorf("repository names must be unique safe path components")
 		}
 		names[repo.Name] = true
-		if repo.URL == "" || !githubSlug.MatchString(repo.GitHub) || repo.WebhookSecret == "" {
-			return cfg, fmt.Errorf("repository %s requires url, github (owner/name) and webhook_secret", repo.Name)
+		if repo.URL == "" || !githubSlug.MatchString(repo.GitHub) {
+			return cfg, fmt.Errorf("repository %s requires url and github (owner/name)", repo.Name)
 		}
+		// An empty webhook_secret is allowed: it means this repository takes no
+		// deliveries at all, which is what a polling deployment wants. A non-empty
+		// value is the per-repository HMAC key (ADR 0013).
 	}
 	return cfg, nil
 }

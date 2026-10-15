@@ -45,8 +45,12 @@ A job that was running when the server restarted, so its commit is not recorded.
 _Avoid_: crashed, lost
 
 **Build event**:
-A push to a qualifying ref, or a manual Build now, from which jobs are created.
+A push to a qualifying ref, a change of the default-branch head found by polling, or a manual Build now, from which jobs are created.
 _Avoid_: trigger, run, pipeline
+
+**Poll interval**:
+How often the build server compares each registered repository's default-branch head with the commit last built, for deployments GitHub cannot reach. Off by default; the head check itself is the last-built check that pushes use.
+_Avoid_: schedule, cron, heartbeat
 
 **Build now**:
 The manual action that starts a build event for a repository's current default-branch head. It skips the last-built check and the probe.

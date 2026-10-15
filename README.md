@@ -14,14 +14,14 @@ It is for one admin running it on their own host for their own public repositori
 
 **Product surfaces**
 
-- **Webhook endpoint**, one per registered repository: `POST /hooks/<repo>`. GitHub calls it on push.
+- **Trigger input**, whichever the deployment can reach: a **webhook endpoint** per registered repository (`POST /hooks/<repo>`, called by GitHub on push), or a **poll interval** (`poll_interval`) that compares each repository's default-branch head with the commit last built. With polling alone, nothing inbound is needed and no public route exists.
 - **Web UI**, the only control surface: home (repositories and recent jobs), job page (details and transcript), and the Build now and Stop actions. There is no CLI. Anything the UI can't do is a config edit and a restart.
-- **Server config file**, edited by the admin: registered repositories with their webhook secrets, cache target, signing key path, glob cap, global build cap, job timeout, retention, and GitHub token.
+- **Server config file**, edited by the admin: registered repositories with their webhook secrets, cache target, signing key path, glob cap, global build cap, job timeout, retention, GitHub token, and the poll interval.
 - **Build-list file** in each repository (`.freezer.yaml`): the repository's build list, and nothing else.
 
 **External pieces**
 
-- **GitHub**: push webhooks in, commit statuses out (one shared service token).
+- **GitHub**: push webhooks in (optional; polling replaces them) and commit statuses out (one shared service token).
 - **Nix** (≥ 2.33): does all building, publishing, and cache probing. The container image carries it; running the binary directly uses the host's daemon.
 - **The S3-compatible bucket** (R2), read publicly through a custom domain. Freezer never serves the cache itself.
 - **A reverse proxy** (or an SSH tunnel to a localhost bind) in front of the UI. It provides TLS and access control.
@@ -32,8 +32,13 @@ Terms are defined in [GLOSSARY.md](GLOSSARY.md). The reasons for each choice are
 
 ### Push, build, publish
 
-1. GitHub POSTs a push to the repository's webhook endpoint. Unregistered repositories are rejected. The signature is checked against that repository's own secret, and a bad signature produces no job at all. Pushes that don't touch the default branch are acknowledged and dropped. Force-pushes count.
-2. The event goes into the repository's queue, which holds one waiting event. A newer event replaces it, and a running event is never cancelled by a push. One event runs per repository at a time, and different repositories run in parallel. The webhook always accepts, since there is no backlog to fill. A superseded event leaves no trace and gets no commit status.
+An event starts in one of two ways, and everything after that is identical.
+
+- **A push.** GitHub POSTs a push to the repository's webhook endpoint, which is why the service needs one publicly reachable route. Step 1 below.
+- **A poll.** With `poll_interval` set, the service resolves every registered repository's default-branch head on that interval — at once when it starts, then every interval — and starts the same event whenever the head is not the commit last built. Nothing inbound is needed: polling is `git ls-remote` out, and commit statuses still go out. A deployment GitHub cannot reach uses this and leaves the webhook route unused.
+
+1. GitHub POSTs a push to the repository's webhook endpoint. Unregistered repositories are rejected, and so is a repository with no `webhook_secret`: without a key every signature would be forgeable, so an empty secret means the repository has no webhook route and every delivery is refused with 403. The signature is checked against that repository's own secret, and a bad signature produces no job at all. Pushes that don't touch the default branch are acknowledged and dropped. Force-pushes count.
+2. The event goes into the repository's queue, which holds one waiting event. A newer event replaces it — except that nothing displaces a waiting Build now, whose reachability matters more than a coalesced push — and a running event is never cancelled by a push. One event runs per repository at a time, and different repositories run in parallel. The webhook always accepts, since there is no backlog to fill. A superseded event leaves no trace and gets no commit status. A polled event whose head is unchanged ends at the last-built check in step 3, so polling costs one resolution per repository per interval and nothing else.
 3. When the event starts, the default branch head is resolved then, not when the push arrived, so a commit that a faster push already overtook is never built. If the resolved commit equals the last-built commit, the event ends there with no jobs.
 4. Freezer posts a `pending` commit status on the resolved commit (not the payload's commit, which can differ after a force-push). It reads the repository's build-list file without evaluating any nix. A missing or unreadable file means `failure` and nothing gets built: reading config must never build anything.
 5. Each entry becomes jobs:
@@ -107,6 +112,9 @@ global_build_cap: 2
 glob_cap: 200
 job_timeout: 30m
 retention: 1000
+# Off when absent or 0: pushes arrive by webhook and the head is never polled.
+# Set it to a duration (10m, 1h) when GitHub cannot reach the service.
+poll_interval: 15m
 public_url: https://freezer.example.com
 cache:
   bucket: public-nix-cache

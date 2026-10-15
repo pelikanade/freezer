@@ -49,6 +49,13 @@ podman run --rm --name freezer -p 127.0.0.1:8080:8080 \
 
 `docker run` takes the same flags. The environment file is read by `--env-file` and is not mounted; only the configuration and the signing key are.
 
+**Triggering.** Two ways, and a private host uses the second:
+
+- **Polling.** Set `poll_interval` (10m is a reasonable start). The service then resolves every registered repository's default-branch head on that interval — at once at start, then every interval — and builds whenever the head is not the commit last built. Nothing inbound is needed: no public route, no webhook, no reverse-proxy vhost. The UI can stay on the private network or behind an SSH tunnel, and the whole deployment can be unreachable from the internet.
+- **Webhooks.** If GitHub can reach the service, register one per repository at `https://SERVICE/hooks/REPOSITORY_NAME` (push events, matching secret). Lower latency, at the cost of exposing that route. A repository with no `webhook_secret` in the configuration has no webhook route at all — every delivery is refused with 403 — so a polling-only deployment omits the field rather than leaving a weak one in place.
+
+Both may be set at once; they cannot double-build, because an event whose head is already built ends at the last-built check. A poll that cannot reach the remote shows up as a failed repository state in the UI and posts no commit status.
+
 **Runtime behavior.**
 
 - The container's Nix store is its writable layer: it survives stop, start and reboot of the same container, and is discarded when the container is recreated (a new image, or an edited unit). R2 holds the published paths, so a discarded store costs rebuild time on the next push, never re-publication, and nothing else is lost. `state_dir` is the bind mount and does survive recreation.
@@ -78,7 +85,7 @@ Use the server configuration in [README.md](../README.md#running-the-service). B
 | Environment file (`.env`) | `GITHUB_TOKEN`, `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`; mode 0600, gitignored, from `deploy/.env.example`. The unit passes it with `EnvironmentFile=` (`--env-file` for `podman run`), so the values exist only in the container's environment. |
 | R2 bucket | One bucket, flat namespace. The S3 endpoint is `https://ACCOUNT_ID.r2.cloudflarestorage.com`; credentials need bucket read/write access. |
 | Public custom domain | Read-only access to that same bucket. This URL is the consumer substituter, not Freezer's HTTP address. |
-| GitHub webhook | Push events to `https://SERVICE/hooks/REPOSITORY_NAME`, with the matching repository secret and HTTPS. |
+| GitHub webhook | Optional: push events to `https://SERVICE/hooks/REPOSITORY_NAME`, with the matching repository secret and HTTPS. Skip it and set `poll_interval` instead when the service is not publicly reachable. |
 | GitHub token | Permission to create commit statuses on every registered repository. Status context is `freezer`. |
 
 Generate a new signing key only when setting up a new trust identity — in the container, as above, or anywhere Nix is installed:
@@ -128,7 +135,7 @@ A store path's narinfo key is its hash prefix followed by `.narinfo`. Read its p
 | Broken closure member | The affected member's narinfo, plus its nar if damaged | Press Build now for the top-level entry. The ordinary probe only sees the top-level path. |
 | Interrupted publication | Identify the missing/damaged closure member and use the applicable row above | Build now bypasses the top-level probe and copies missing members. |
 
-Deleting only a nar does **not** repair anything: both a normal probe and `nix copy` can succeed while its narinfo remains. Build now bypasses the probe, but it cannot make Nix recheck an existing narinfo's nar. Delete the matching narinfo as well. Any additional hand-run `nix path-info`, `nix copy` or substitution command must include the two TTL options above.
+Deleting only a nar does **not** repair anything: both a normal probe and `nix copy` can succeed while its narinfo remains. Build now bypasses the probe, but it cannot make Nix recheck an existing narinfo's nar. Delete the matching narinfo as well. Any additional hand-run `nix path-info`, `nix copy` or substitution command must include the two TTL options above — and on a host whose Nix does not trust the invoking user, those options are *ignored* with a warning (the default positive TTL is 30 days), so hand-run verification can report a deleted object as present. The container deployment does not have that problem: Nix runs as root inside the container, where its own configuration trusts it.
 
 If the public domain still returns stale metadata after the bucket is repaired, check the domain's cache policy and invalidate the specific stale response there. Freezer's own probe uses the S3 API and cannot verify what the public domain serves. Re-run the scratch-store substitution through the domain before considering the repair complete.
 

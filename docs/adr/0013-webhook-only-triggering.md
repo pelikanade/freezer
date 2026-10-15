@@ -6,6 +6,8 @@ Accepted consequence, stated plainly: GitHub does not automatically redeliver fa
 
 A periodic sweep — comparing each repository's remote head against the commit last built — would close that gap, and was considered and rejected: for a single-maintainer deployment the extra polling path and its traffic were judged not worth it against a recovery action that already exists. The same reasoning applies to a durable event queue, which cannot repair a webhook that was never delivered in the first place.
 
+**Amended by [ADR 0023](0023-triggering-can-poll-the-branch-head.md):** that sweep now exists as `poll_interval`, off by default, for a deployment GitHub cannot reach. The reasoning above still holds for a deployment that has a publicly reachable webhook route.
+
 ## Consequences
 
 - Silence is ambiguous: the absence of a commit status can mean no push happened, no webhook arrived, or the server was down.
@@ -13,4 +15,4 @@ A periodic sweep — comparing each repository's remote head against the commit 
 - Each repository has one persistent checkout in the state directory: fetch the commit that was re-resolved, check it out detached, and never write to it (no lock-file updates, no commits). It is never cleaned up either, so it grows like the nix store does — the same accepted consequence as ADR 0015's missing garbage collection.
 - The commit status is posted for the commit that was actually built — the re-resolved head, not the payload's `after`, which can differ after a force-push — as one status per event (pending when the event starts, then success or failure with the failed-entry count). An event where every entry is a cache hit still reports success: the commit has been verified built, even though nothing was published.
 - The webhook secret is per repository, a field in the server config beside the repository's URL. One global secret would let any registered repository forge any other's events.
-- Builds are fast to start after a push and there is no polling traffic against GitHub.
+- Builds are fast to start after a push and, with webhooks only, there is no polling traffic against GitHub; setting `poll_interval` trades that for not needing an inbound route (ADR 0023).
