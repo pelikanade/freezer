@@ -42,6 +42,9 @@ HealthTimeout=5s
 
 [Service]
 Restart=on-failure
+# A crash loop must not hammer: five seconds between attempts, as the service
+# takes that long to fail its startup checks.
+RestartSec=5
 # Freezer shuts its HTTP server down within five seconds; give builds time to die.
 TimeoutStopSec=30
 

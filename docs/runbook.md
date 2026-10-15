@@ -67,7 +67,7 @@ podman ps --filter name=freezer
 podman healthcheck run freezer
 ```
 
-Upgrades are a rebuild and a restart: build the new tag, update `Image=` in the unit, `systemctl --user daemon-reload`, `systemctl --user restart freezer`. `TimeoutStopSec=30` in the unit lets a running build die: Freezer itself closes its listener within five seconds, and recovers interrupted jobs at the next start.
+Upgrades are a rebuild and a restart: build the new tag, update `Image=` in the unit, `systemctl --user daemon-reload`, `systemctl --user restart freezer`. `Restart=on-failure` with `RestartSec=5` restarts a crashed service without hammering, and leaves a deliberate stop stopped; `TimeoutStopSec=30` lets a running build die while Freezer itself closes its listener within five seconds and recovers interrupted jobs at the next start.
 
 ## Runtime files and external services
 
