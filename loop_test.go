@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"net/url"
@@ -36,11 +37,16 @@ func command(t *testing.T, dir, name string, args ...string) string {
 	defer cancel()
 	cmd := exec.CommandContext(ctx, name, args...)
 	cmd.Dir = dir
-	out, err := cmd.CombinedOutput()
-	if err != nil {
-		t.Fatalf("%s %q: %v\n%s", name, args, err, out)
+	// stdout is the value under test and stderr is commentary; merging them made an
+	// untrusted user's warning about the narinfo TTL options read as an output path,
+	// which is the only reason eight of these tests failed on a host whose Nix trusts
+	// only root @wheel. Freezer's own code keeps the streams apart for the same reason.
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout, cmd.Stderr = &stdout, &stderr
+	if err := cmd.Run(); err != nil {
+		t.Fatalf("%s %q: %v\nstdout:\n%s\nstderr:\n%s", name, args, err, stdout.String(), stderr.String())
 	}
-	return strings.TrimSpace(string(out))
+	return strings.TrimSpace(stdout.String())
 }
 
 func nix(t *testing.T, args ...string) string {
