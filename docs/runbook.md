@@ -124,6 +124,8 @@ After one successful publication, verify a cache-hit event with a subsequent def
 
 Stop the service for a file-copy backup (`podman compose -f ~/freezer/compose.yaml stop`), or use SQLite's online backup mechanism. Copying only `freezer.sqlite` while WAL writes are active is not a valid file-copy backup; use the backup API or stop the service so the WAL is checkpointed. Back up the signing key separately. Checkouts and the container's Nix store are not retained or garbage-collected by Freezer.
 
+**Clearing the history.** Retention always keeps the newest N jobs, so it cannot empty the list. To start over — after a run of interrupted or failed jobs from an image change, say — stop the service and delete `freezer.sqlite` (with its `-wal` and `-shm` files) from the host's `state_dir`; the database is recreated at the next start, repository rows included. That also discards the last-built record, so the next poll builds the head again, and it drops every transcript.
+
 SQLite deletion reuses pages but does not shrink the database file. An admin may run `VACUUM` during a maintenance window after taking a backup. Do not mistake a constant file size for failed retention: check that the old job page and `/jobs/ID/log` both return 404 while the newest jobs remain readable.
 
 Queued events are lost on restart. A running job becomes interrupted and its commit is not recorded; any transcript already written survives. Missed pushes and interrupted publication require Build now or a later push. There is no reconcile sweep or automatic job retry.
