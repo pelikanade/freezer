@@ -13,9 +13,9 @@
 
 services:
   freezer:
-    # The tag is the pin: build it with `podman build -t freezer:0.1.0 .` and
+    # The tag is the pin: build it with `podman build -t freezer:0.2.3 .` and
     # change it here when a new image is deployed.
-    image: localhost/freezer:0.1.0
+    image: localhost/freezer:0.2.3
     container_name: freezer
     restart: always
     ports:

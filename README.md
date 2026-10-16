@@ -85,7 +85,7 @@ entries:
   - legacyPackages.x86_64-linux.my-tools-*
 ```
 
-Only the final attribute component may contain a glob (`*`, `?`, or character classes). Quoted Nix attribute names are accepted; output selectors (`^dev`, `^*`) are not. Unknown YAML fields and invalid entries reject the build list before Nix runs. `glob_cap` defaults to 200 total glob matches per event; a pattern that would exceed the remaining allowance fails entirely. `job_timeout` defaults to `30m` and includes evaluation, probing and publication. The signing key is passed by filename to Nix and is never read by Freezer.
+Only the final attribute component may contain a glob (`*`, `?`, or character classes). Quoted Nix attribute names are accepted; output selectors (`^dev`, `^*`) are not. Unknown YAML fields and invalid entries reject the build list before Nix runs. `glob_cap` defaults to 200 total glob matches per event; a pattern that would exceed the remaining allowance fails entirely. `job_timeout` defaults to `1h` and includes evaluation, probing and publication. The signing key is passed by filename to Nix and is never read by Freezer.
 
 Nix invocations separate options from paths with `--` and preserve evaluated path bytes. A probe is a hit only when Nix succeeds and reports that exact path; option-like values or extra whitespace cannot masquerade as a different published path. Static HTTP assets are limited to the stylesheet; templates are rendered only by the application.
 
@@ -94,7 +94,7 @@ Nix invocations separate options from paths with `--` and preserve evaluated pat
 The deployment route is one container under rootless Podman:
 
 ```sh
-podman build -t freezer:0.1.0 .
+podman build -t freezer:0.2.3 .
 ```
 
 The image carries Nix 2.34.8, git and curl, so the host needs no Nix of its own, and the service drives the Nix inside the container. `deploy/` holds the compose file that pins the deployment (image tag, port, mounts, environment, health check, restart policy and the container capabilities Nix's sandbox needs) plus example configuration and environment files; [the runbook](docs/runbook.md#deploy-as-a-container) covers the image, secrets, the compose project, R2, public-domain substitution, self-hosting, retention and repair.
@@ -105,9 +105,9 @@ Running the binary directly is also supported: `devenv shell -- go build -o .dev
 # Container deployments must listen on 0.0.0.0; the binary route binds loopback.
 listen: 0.0.0.0:8080
 state_dir: /var/lib/freezer
-global_build_cap: 2
+global_build_cap: 3
 glob_cap: 200
-job_timeout: 30m
+job_timeout: 1h
 retention: 1000
 # Required and positive: polling is the only trigger. 10m to 1h is the usual
 # range; a poll costs one branch resolution per repository.
