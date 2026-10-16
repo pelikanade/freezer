@@ -79,7 +79,7 @@ Hero for the braid: **index desktop**. Failed + running prove the state vocabula
 | Region | Target |
 |--------|--------|
 | Repos | Treeview first (ops write surface): Name · Forge · Last built · Latest job · Build now |
-| Jobs | **Recent jobs** as a sunken GtkTreeView below repos: columns Status · Entry · Job · Started · Duration · Result · Action; group rows by `(repo, commit)` with a rowspan identity column |
+| Jobs | **Recent jobs** as a sunken GtkTreeView below repos: columns Status · Entry · Job · Started · Duration · Result · Action; group rows by `(repo, commit)` with a rowspan identity column. The columns are fixed and sized to their content — Started carries a full `YYYY-MM-DD HH:MM:SS UTC` stamp and Duration an hour-long elapsed time, both `nowrap` — so between 641 and 1100px the Result column drops out (as it already does ≤640px) and the treeview scrolls sideways past 919px rather than scaling the rest: a scaled `nowrap` column paints over its neighbour |
 | Feedback | Optional InfoBar from `?notice=` (see § Feedback) |
 | Empty | Empty row inside the jobs treeview; repos empty-state is a separate dashed well only if config is empty |
 
