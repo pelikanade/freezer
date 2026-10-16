@@ -12,9 +12,9 @@ listen: 0.0.0.0:8080
 # ~/freezer/state here).
 state_dir: /var/lib/freezer
 
-global_build_cap: 2
+global_build_cap: 3
 glob_cap: 200
-job_timeout: 30m
+job_timeout: 1h
 retention: 1000
 
 # Required and positive: polling is the only trigger, and it needs no inbound

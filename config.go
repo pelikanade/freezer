@@ -69,7 +69,7 @@ func decodeYAML(filename string, value any) error {
 }
 
 func LoadConfig(filename string) (Config, error) {
-	cfg := Config{GlobCap: 200, JobTimeout: 30 * time.Minute, Listen: "127.0.0.1:8080", StateDir: "state", GlobalBuildCap: 2, Retention: 1000, GitHubAPIBase: "https://api.github.com"}
+	cfg := Config{GlobCap: 200, JobTimeout: time.Hour, Listen: "127.0.0.1:8080", StateDir: "state", GlobalBuildCap: 3, Retention: 1000, GitHubAPIBase: "https://api.github.com"}
 	if err := decodeYAML(filename, &cfg); err != nil {
 		return cfg, err
 	}
