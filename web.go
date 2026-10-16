@@ -77,6 +77,11 @@ var pages = template.Must(template.New("pages").Funcs(template.FuncMap{
 }).ParseFS(webFiles, "web/*.html"))
 
 func jobDuration(j Job) string {
+	// A job that never took a build slot has no start to measure from; the
+	// zero time would otherwise render as a duration of centuries.
+	if j.StartedAt.IsZero() {
+		return "—"
+	}
 	if j.Status == "interrupted" && j.FinishedAt == nil {
 		return "interrupted"
 	}
