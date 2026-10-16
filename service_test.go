@@ -220,6 +220,27 @@ func (s *serviceFixture) waitPage(t *testing.T, path, contains string) string {
 
 func (s *serviceFixture) idle(t *testing.T) { t.Helper(); s.waitPage(t, "/", `data-busy="false"`) }
 
+// A job that never took a build slot has no start, duration, cache verdict or
+// published count to show, whatever ended it: an event that stopped it, or a
+// restart that interrupted it. The index and the job page must say so rather
+// than render the zero time as a date and a duration of centuries (ADR 0025).
+func (s *serviceFixture) neverStarted(t *testing.T, id int) {
+	t.Helper()
+	_, page := s.get(t, fmt.Sprintf("/jobs/%d", id))
+	for _, want := range []string{"<dt>Started</dt><dd>—</dd>", "<dt>Duration</dt><dd>—</dd>", "<dt>Cache</dt><dd>not yet probed</dd>"} {
+		if !strings.Contains(page, want) {
+			t.Fatalf("job %d never started but renders %q differently: %s", id, want, page)
+		}
+	}
+	if strings.Contains(page, "0 paths") {
+		t.Fatalf("job %d never started but reports published paths: %s", id, page)
+	}
+	_, index := s.get(t, "/")
+	if strings.Contains(index, "0001-01-01") {
+		t.Fatalf("the index gives a job that never started a start time:\n%s", index)
+	}
+}
+
 func (s *serviceFixture) noStatus(t *testing.T) {
 	t.Helper()
 	s.idle(t)
@@ -444,6 +465,7 @@ func TestRestartInterruptsRunningJob(t *testing.T) {
 	if !strings.Contains(planned, "freezer restarted before this job started") || !strings.Contains(planned, "interrupted") {
 		t.Fatalf("a job the restart found unstarted is not reported interrupted: %s", planned)
 	}
+	s.neverStarted(t, 2)
 	// The commit was never recorded, so the poll after the restart starts it
 	// again: an interrupted event recovers without an operator.
 	s.nextStatus(t, "pending")
@@ -527,6 +549,7 @@ func TestPlannedEntriesAreVisibleBeforeTheyRun(t *testing.T) {
 		if !strings.Contains(page, "planned") || !strings.Contains(page, "not yet probed") {
 			t.Fatalf("job %d is not shown as planned: %s", id, page)
 		}
+		s.neverStarted(t, id)
 	}
 	_, index := s.get(t, "/")
 	for _, id := range []int{1, 2, 3} {
@@ -564,6 +587,7 @@ func TestGlobalCapAndStopPreventLaterJobs(t *testing.T) {
 	if page := s.waitPage(t, "/jobs/2", "The event ended before this job started."); !strings.Contains(page, "stopped") {
 		t.Fatalf("a job the event never started did not end as stopped: %s", page)
 	}
+	s.neverStarted(t, 2)
 	// The new event starts with the nonce-named slow fixture, so its probe cannot
 	// answer from a stale local narinfo cache and the copy really runs.
 	s.setEntries(t, s.entry("slow"), s.entry("hello"))

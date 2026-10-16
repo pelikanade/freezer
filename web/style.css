@@ -145,21 +145,26 @@ h1, h2 { margin: 0; font-weight: bold; }
 .tv tbody tr:hover > * { background: var(--fz-prelight); }
 .tv tbody tr:focus-within > td { background: var(--fz-select); }
 .tv tbody tr:focus-within a { color: #102a52; }
-.tv .grp { width: 145px; vertical-align: top; padding-top: 4px; white-space: normal; overflow-wrap: anywhere; border-right: 1px solid #ecebe9; }
+.tv .grp { width: 130px; vertical-align: top; padding-top: 4px; white-space: normal; overflow-wrap: anywhere; border-right: 1px solid #ecebe9; }
 .tv .grp .repo { font-weight: bold; display: flex; align-items: center; gap: 5px; }
 .tv .grp .sha { color: var(--fz-muted); font-weight: normal; }
 .tv .entry, .tv .name { overflow-wrap: anywhere; }
 .tv .entry a { font-family: var(--fz-mono); font-size: 12px; text-decoration: none; }
 .tv .entry a:hover { text-decoration: underline; }
-.tv .num { width: 90px; text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
-.tv .when { width: 155px; white-space: nowrap; font-variant-numeric: tabular-nums; }
-.tv .res { width: 180px; color: var(--fz-muted); max-width: 26ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.tv .act { text-align: right; width: 110px; white-space: nowrap; }
+.tv .num { width: 130px; text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; }
+/* 188px holds "2026-10-16 01:18:18 UTC" (168px on this font stack) and its
+   2×7px padding. Both cells are nowrap, and a column narrower than its text
+   paints over the next one instead of wrapping, so these two carry their
+   content width; the columns that can lose width (.grp, .res) are the ones
+   that give it up. */
+.tv .when { width: 188px; white-space: nowrap; font-variant-numeric: tabular-nums; overflow: hidden; }
+.tv .res { width: 145px; color: var(--fz-muted); max-width: 26ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tv .act { text-align: right; width: 105px; white-space: nowrap; }
 .tv .act form { margin: 0; }
 .tv .sub { display: none; }
-.tv .id { width: 65px; color: var(--fz-muted); font-variant-numeric: tabular-nums; }
+.tv .id { width: 76px; overflow: hidden; color: var(--fz-muted); font-variant-numeric: tabular-nums; }
 .tv .never { color: var(--fz-muted); font-style: italic; }
-.tv .stc { width: 160px; }
+.tv .stc { width: 150px; }
 .repos .name, .repos .latest { width: 180px; }
 .repos .forge { width: 180px; overflow-wrap: anywhere; }
 .paging { display: flex; gap: 10px; justify-content: flex-end; padding: 7px; }
@@ -246,10 +251,17 @@ h1, h2 { margin: 0; font-weight: bold; }
 .tv-empty strong { color: var(--fz-text); }
 
 @media (max-width: 1100px) { .props { grid-template-columns: max-content minmax(0,1fr) max-content minmax(0,1fr); } }
-@media (max-width: 1000px) and (min-width: 641px) {
-  .tv .res { width: 120px; }
-  .tv .grp, .tv .when { width: 110px; }
-  .tv .stc { width: 115px; }
+/* A scaled `table-layout: fixed` column paints its nowrap text over the next
+   one, so the fixed columns keep their widths down to 641px and the shortfall
+   goes to the treeview's scroller instead. The Result column drops out below
+   1101px (it repeats what the status icon and word already say, and ≤640px
+   hides it too), which leaves 779px of fixed columns; the floor adds 140px for
+   the entry, the narrowest that still shows a path rather than one character
+   per line. Above 1101px the declared widths leave the entry 148px or more on
+   their own, so no floor is needed there. */
+@media (max-width: 1100px) and (min-width: 641px) {
+  .tv .res { display: none; }
+  .tv.jobs table { min-width: 919px; }
 }
 /* ---------- narrow (≤ 640px) ---------- */
 @media (max-width: 640px) {

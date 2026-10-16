@@ -79,7 +79,7 @@ Hero for the braid: **index desktop**. Failed + running prove the state vocabula
 | Region | Target |
 |--------|--------|
 | Repos | Treeview first (ops write surface): Name · Forge · Last built · Latest job · Build now |
-| Jobs | **Recent jobs** as a sunken GtkTreeView below repos: columns Status · Entry · Job · Started · Duration · Result · Action; group rows by `(repo, commit)` with a rowspan identity column |
+| Jobs | **Recent jobs** as a sunken GtkTreeView below repos: columns Status · Entry · Job · Started · Duration · Result · Action; group rows by `(repo, commit)` with a rowspan identity column. The columns are fixed and sized to their content — Started carries a full `YYYY-MM-DD HH:MM:SS UTC` stamp and Duration an hour-long elapsed time, both `nowrap` — so between 641 and 1100px the Result column drops out (as it already does ≤640px) and the treeview scrolls sideways past 919px rather than scaling the rest: a scaled `nowrap` column paints over its neighbour |
 | Feedback | Optional InfoBar from `?notice=` (see § Feedback) |
 | Empty | Empty row inside the jobs treeview; repos empty-state is a separate dashed well only if config is empty |
 
@@ -162,7 +162,7 @@ Custom properties in one hand-written stylesheet (and only there). No CSS framew
 | Toolbar | `.toolbar` + `.tb` | Reload, Auto-refresh toggle (aria-pressed), Stop (running job), Jobs (detail). Real `<button>` / `<a>`. |
 | Pathbar | `.pathbar` + `.btn-path` | Job pages: freezer → repo → `#id entry`. Current crumb `aria-current="page"`. Omit on index. |
 | Treeview | `.tv table` | Sunken border, sticky header, rules-hint stripes, hover prelight, selected row uses `--fz-select`. Explicit `.fx-status` (or `.st`) class — **never** structural selectors. |
-| Status icon+word | `.st` / `.st-{status}` | Icon + word; never colour alone. Words: `planned` · `running` · `succeeded` · `failed` · `stopped` · `interrupted` · `matched nothing` (display only; underlying status stays `succeeded` for matched-nothing). A planned job shows a dash for Started and Duration, and its page says it waits for a build slot. |
+| Status icon+word | `.st` / `.st-{status}` | Icon + word; never colour alone. Words: `planned` · `running` · `succeeded` · `failed` · `stopped` · `interrupted` · `matched nothing` (display only; underlying status stays `succeeded` for matched-nothing). A job that never took a build slot (`started_at` zero, whatever status ended it) shows a dash for Started and Duration; a planned job's page says it waits for a build slot. |
 | Progress | `.pbar` | Pulse candy for running (respect `prefers-reduced-motion`). |
 | Button | `.btn` / `.btn-sm` / `.btn-default` | Gradient Clearlooks; default-button ring for the dialog primary. |
 | InfoBar | `.infobar.{info,warning,question,error}` | Icon + primary + secondary + optional acts. `role="alert"` only for **failed**; running/notice use `role="status"`. |
@@ -199,7 +199,7 @@ Custom properties in one hand-written stylesheet (and only there). No CSS framew
 | Never-built repo | Italic “never built”; Latest = “no jobs” |
 | Running | Spinner + pulse bar; Stop on row + toolbar; meta refresh 10s (job) / 15s (index if any running); Cache/Published pending |
 | Succeeded (built) | Green check; duration; published count |
-| Planned | Clock icon + “planned”; Started and Duration show —, the Cache cell reads “not yet probed”, and the transcript well says the job waits for a build slot. An event that ends first leaves the row `stopped`; a restart leaves it `interrupted` (ADR 0025). |
+| Planned | Clock icon + “planned”; Started and Duration show —, the Cache cell reads “not yet probed”, Published stays —, and the transcript well says the job waits for a build slot. An event that ends first leaves the row `stopped`; a restart leaves it `interrupted` (ADR 0025) — those rows never took a build slot either, so they keep every one of those dashes. |
 | Succeeded + cache hit | Distinct hit icon (check + badge); no transcript; empty well |
 | Succeeded + matched nothing | Warning InfoBar + “matched nothing” label; underlying status remains succeeded; 0 paths; cache “not probed” |
 | Failed | Error InfoBar with **`The job did not succeed`**; transcript opens at end; red error lines |
