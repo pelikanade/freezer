@@ -2,13 +2,15 @@
 {{define "page"}}<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="color-scheme" content="light"><title>{{.Title}} · freezer</title><link rel="stylesheet" href="/static/style.css">{{if .Refresh}}<meta http-equiv="refresh" content="{{.Refresh}}">{{end}}</head>
 <body>{{template "icons"}}<a class="skip" href="#main">Skip to content</a>
+<div class="window">
 <header class="titlebar"><svg class="ic" aria-hidden="true"><use href="#i-app"/></svg><span>{{.Title}} · freezer</span></header>
 <nav class="toolbar" aria-label="Job controls"><a class="tb" href="{{.ReloadURL}}"><svg class="ic" aria-hidden="true"><use href="#i-reload"/></svg>Reload</a><span class="tb-sep" aria-hidden="true"></span><a class="tb" href="{{.ToggleURL}}" role="button" aria-pressed="{{if .Paused}}false{{else}}true{{end}}"><svg class="ic" aria-hidden="true"><use href="#i-clock"/></svg>{{if .Paused}}Resume auto-refresh{{else}}Pause auto-refresh{{end}}</a>{{if .Job}}{{if eq .Job.Status "running"}}<form method="post" action="/jobs/{{.Job.ID}}/stop"><button class="tb danger" type="submit"><svg class="ic" aria-hidden="true"><use href="#i-stop"/></svg>Stop</button></form>{{end}}<span class="tb-spring"></span><a class="tb" href="/">Jobs</a>{{end}}</nav>
 {{if .Job}}<nav class="pathbar" aria-label="Breadcrumb"><a class="btn btn-path" href="/">freezer</a><a class="btn btn-path" href="/#repo-{{.Job.Repo}}">{{.Job.Repo}}</a><span class="btn btn-path" aria-current="page">#{{.Job.ID}} <code>{{.Job.Entry}}</code></span></nav>{{end}}
 {{if .Notice}}<div class="infobar info" role="status"><svg class="ic ic-lg" aria-hidden="true"><use href="#i-info"/></svg><div class="msg"><p class="primary">{{.Notice}}</p><p>{{.NoticeDetail}}</p></div><a class="btn btn-sm" href="{{.ReloadURL}}">Dismiss</a></div>{{end}}
 <main class="content" id="main" tabindex="-1">
 {{if eq .Kind "index"}}{{template "index" .}}{{else if eq .Kind "job"}}{{template "job" .}}{{else}}{{template "error" .}}{{end}}
-</main><footer class="statusbar"><span data-busy="{{.Busy}}">{{.Running}} running · {{.Queued}} queued</span><span class="grow opt">{{if .Paused}}Auto-refresh paused{{else if .Refresh}}Reloads every {{.Refresh}} seconds · <a href="{{.ToggleURL}}">Pause</a>{{else}}Auto-refresh while a job runs{{end}}{{if .Older}} · <a href="{{.Older}}">Older</a>{{end}}{{if .Newer}} · <a href="{{.Newer}}">Newer</a>{{end}}</span><span>Rendered {{.Now}}</span></footer></body></html>{{end}}
+</main><footer class="statusbar"><span data-busy="{{.Busy}}">{{.Running}} running · {{.Queued}} queued</span><span class="grow opt">{{if .Paused}}Auto-refresh paused{{else if .Refresh}}Reloads every {{.Refresh}} seconds · <a href="{{.ToggleURL}}">Pause</a>{{else}}Auto-refresh while a job runs{{end}}{{if .Older}} · <a href="{{.Older}}">Older</a>{{end}}{{if .Newer}} · <a href="{{.Newer}}">Newer</a>{{end}}</span><span>Rendered {{.Now}}</span></footer>
+</div></body></html>{{end}}
 
 {{define "index"}}
 <h1 class="vh">Repositories and recent jobs</h1>

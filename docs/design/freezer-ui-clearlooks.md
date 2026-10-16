@@ -54,24 +54,32 @@ Steal: soft grey window plate, Metacity blue titlebar, raised gradient buttons, 
 
 Hero for the braid: **index desktop**. Failed + running prove the state vocabulary; mobile proves the collapse.
 
+*The screenshots above are the 2026-10-08 review; the desktop ones predate the window frame added on 2026-10-16 (§1), which leaves every element inside the frame untouched. The mobile shots still match: ≤640px the frame collapses.*
+
 ---
 
 ## 1. Layout
 
 ### Shared chrome
 
+The whole stack is one floating window on a desktop backdrop:
+
 ```
-┌─ Metacity titlebar (page title) ─┐
-├─ toolbar (Reload · Auto · Stop) ─┤
-├─ pathbar (job pages only) ───────┤
-├─ optional GtkInfoBar ────────────┤
-│ content (repos + jobs / job)     │
-├─ statusbar ──────────────────────┤
-└──────────────────────────────────┘
+   ┌── body: --fz-desktop backdrop, padding = the desktop strip ───┐
+   │  ┌─ .window: 1px --fz-frame, 5px/5px/2px/2px, --fz-cast ────┐ │
+   │  │ Metacity titlebar (page title)                          │ │
+   │  │ toolbar (Reload · Auto · Stop)                          │ │
+   │  │ pathbar (job pages only)                                │ │
+   │  │ optional GtkInfoBar                                     │ │
+   │  │ content (repos + jobs / job)                            │ │
+   │  │ statusbar                                               │ │
+   │  └─────────────────────────────────────────────────────────┘ │
+   └──────────────────────────────────────────────────────────────┘
 ```
 
+- **Frame (2026-10-16):** `.window` floats on a GNOME 2 backdrop, as on nvirellia.im. `body` paints `--fz-desktop` (`fixed`, so the gradient is the viewport's, not the document's) and its padding is the visible desktop strip; `.window` is one flex column that fills what is left of the viewport and grows with the page, capped at 1240px. ≤640px the strip, border, corner radii and shadow all drop, so the mobile layout stays edge to edge.
 - Navigation is toolbar + pathbar (GNOME-app grammar). Repos live in the index content as a treeview; `#repo-{Name}` anchors stay.
-- Titlebar is CSS chrome (not a real WM). Page title stays `{Title} · freezer`.
+- Titlebar is CSS chrome (not a real WM) — so is the frame around it: nothing minimises, maximises or closes. Page title stays `{Title} · freezer`.
 - Statusbar at the bottom: live counts, refresh note, last-rendered clock.
 
 ### Index (`GET /`)
@@ -101,6 +109,7 @@ GtkMessageDialog card: icon + primary + hint + HTTP code + default Back button.
 
 ### Mobile ~390px
 
+- The frame collapses to full bleed: no desktop strip, border, radius or shadow — the chrome keeps the whole viewport.
 - Titlebar + toolbar compress (hide long labels).
 - Pathbar crumbs truncate (entry crumb hides the monospace fragment).
 - Treeview headers hide; each row becomes icon + entry link + secondary line (status · repo · short sha · when · duration); Build now / Stop stay visible.
@@ -127,6 +136,9 @@ Custom properties in one hand-written stylesheet (and only there). No CSS framew
 | `--fz-accent` / `--fz-focus` | `#3465a4` | Tango Sky Blue 2 (QS `--accent` / `--focus`) |
 | `--fz-edge` | `#8a8680` | button outline — ≥ **3:1** on bg |
 | `--fz-edge-soft` | `#bdbab8` | treeview header separators |
+| `--fz-desktop` | `linear-gradient(#e3e6ea → #d2d6dc)` fixed | GNOME 2 backdrop the window floats on (nvirellia.im) |
+| `--fz-frame` | `#5f5c58` | window frame outline (Metacity) |
+| `--fz-cast` | `0 2px 4px rgba(0,0,0,.12), 0 10px 28px rgba(30,40,60,.18)` | the window's cast shadow |
 | `--fz-hilight` | `#ffffff` | top bevel |
 | `--fz-btn` | `linear-gradient(#fff → #f6f5f4 → #e3e1de)` | Clearlooks button fill (sampled + QS `--fill`) |
 | `--fz-btn-hover` | mix toward selected (light blue wash) | gtkrc button PRELIGHT |
@@ -158,7 +170,7 @@ Custom properties in one hand-written stylesheet (and only there). No CSS framew
 
 | Component | Class / pattern | Notes |
 |-----------|-----------------|-------|
-| Window frame | `.titlebar` | Decorative; icon + page title. Not interactive. Full-bleed, with no floating window or desktop wallpaper (that would be costume). Skip link (`.skip`) sits above it. |
+| Window frame | `.window` + `.titlebar` | One floating window: `.window` carries the frame, the corner radii and the cast shadow; the titlebar holds icon + page title. Both decorative — no minimise/maximise/close, because this is a page, not a WM. Not interactive. Skip link (`.skip`) sits outside the frame, above it. |
 | Toolbar | `.toolbar` + `.tb` | Reload, Auto-refresh toggle (aria-pressed), Stop (running job), Jobs (detail). Real `<button>` / `<a>`. |
 | Pathbar | `.pathbar` + `.btn-path` | Job pages: freezer → repo → `#id entry`. Current crumb `aria-current="page"`. Omit on index. |
 | Treeview | `.tv table` | Sunken border, sticky header, rules-hint stripes, hover prelight, selected row uses `--fz-select`. Explicit `.fx-status` (or `.st`) class — **never** structural selectors. |
@@ -298,3 +310,11 @@ The production templates and stylesheet are in `web/`, embedded in the binary. A
 Browser measurements: body contrast 10.72:1, link 8.78:1, muted 6.19:1 (6.59:1 on stripes), button border 3.07:1; keyboard focus has a 2px ring. Mobile views had no page-level horizontal overflow. Build now and paging worked with JavaScript disabled. The failed job's 2000-line transcript viewport initially showed its final line; plain text retained the entire 2105-line build and command output.
 
 `devenv test` also covers 303 action redirects, status-specific copy, full transcript persistence through restart, HTML truncation, and keyset paging with within-page grouping. Nix publication uses `--print-build-logs` so the stored transcript includes complete build output. Local browser evidence and screenshots are linked from `.project-map/` and remain untracked.
+
+## 11. Frame change (2026-10-16)
+
+The window frame of §1 was added at the owner's direction, referencing nvirellia.im. `web/pages.html` wraps the chrome in `.window` (the skip link stays outside it), and `web/style.css` carries `--fz-desktop`, `--fz-frame` and `--fz-cast` plus the frame rule; the ≤640px block returns the page to full bleed. The mock in `prototypes/` mirrors both.
+
+Verified against the running service in headless Chromium at 1440×900, 1280×800, 750×800, 660×800 and 390×844, on the index, a failed job page and the 404 page: the frame, its corner radii and its shadow render at every width above 640px, the window caps at 1240px, and ≤640px the page is edge to edge with neither strip nor frame. No page-level horizontal overflow at any of those widths.
+
+That strip costs the 641–1100px band 34px, which the repositories table's unspecified Last-built column had been absorbing: it scaled to zero and painted over Latest job. `.tv.repos table` therefore took the same `min-width` floor the jobs table already had, so the treeview scrolls instead of overlapping.
