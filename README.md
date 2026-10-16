@@ -94,7 +94,7 @@ Nix invocations separate options from paths with `--` and preserve evaluated pat
 The deployment route is one container under rootless Podman:
 
 ```sh
-podman build -t freezer:0.1.0 .
+podman build -t freezer:0.2.3 .
 ```
 
 The image carries Nix 2.34.8, git and curl, so the host needs no Nix of its own, and the service drives the Nix inside the container. `deploy/` holds the compose file that pins the deployment (image tag, port, mounts, environment, health check, restart policy and the container capabilities Nix's sandbox needs) plus example configuration and environment files; [the runbook](docs/runbook.md#deploy-as-a-container) covers the image, secrets, the compose project, R2, public-domain substitution, self-hosting, retention and repair.

@@ -1,6 +1,6 @@
 # Freezer: webhook-driven Nix builds published to an S3-compatible cache (Cloudflare R2).
 #
-#   podman build -t freezer:0.1.0 .
+#   podman build -t freezer:0.2.3 .
 #
 # Stage 1 compiles the Go package with the official Go toolchain; stage 2 is the
 # runtime, on the official Nix image, which ships Nix 2.34.8, git, tar and curl

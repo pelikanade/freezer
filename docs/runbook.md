@@ -7,7 +7,7 @@ Freezer publishes trusted, public Nix store paths. Register only public reposito
 One container under rootless Podman, with no Nix on the host. The image is built from the `Dockerfile` in the repository root: its first stage compiles the Go package with the official Go image, and the result runs on the official Nix image (`nixos/nix:2.34.8`), which ships Nix 2.34.8, git, tar and curl on `PATH` — everything Freezer shells out to. Building the image runs no Nix. The service drives the Nix *inside* the container, so builds, probing and publication all happen there and the host's Nix daemon is never used. (`devenv test` is the development acceptance suite and still needs the host daemon.)
 
 ```sh
-podman build -t freezer:0.1.0 .
+podman build -t freezer:0.2.3 .
 ```
 
 Everything the service writes lives under the deploying user's home, and the container runs as that user. Prepare the deployment directory and bring the project up:
@@ -18,7 +18,7 @@ cp deploy/freezer.example.yaml ~/freezer/freezer.yaml   # bucket, endpoint, repo
 install -m 600 deploy/.env.example ~/freezer/.env       # then edit: GITHUB_TOKEN and the R2 credentials
 chmod 600 ~/freezer/freezer.yaml
 cp deploy/compose.yaml ~/freezer/compose.yaml
-podman run --rm --entrypoint nix-store -v "$HOME/freezer:/keys" freezer:0.1.0 \
+podman run --rm --entrypoint nix-store -v "$HOME/freezer:/keys" freezer:0.2.3 \
   --generate-binary-cache-key freezer-cache-1 /keys/signing.key /keys/signing.pub
 podman compose -f ~/freezer/compose.yaml up -d
 ```
@@ -46,7 +46,7 @@ podman logs freezer
 podman healthcheck run freezer
 ```
 
-Upgrades are a rebuild and a recreate: build the new tag (`podman build -t freezer:0.2.0 .`), point `image:` at it in `~/freezer/compose.yaml`, and run `podman compose -f ~/freezer/compose.yaml up -d` again. Compose recreates the container — which discards the container's own Nix store, the trade noted above, while `state_dir` is a bind mount and survives — and `restart: always` keeps it up.
+Upgrades are a rebuild and a recreate: build the new tag (`podman build -t freezer:0.2.3 .`), point `image:` at it in `~/freezer/compose.yaml`, and run `podman compose -f ~/freezer/compose.yaml up -d` again. Compose recreates the container — which discards the container's own Nix store, the trade noted above, while `state_dir` is a bind mount and survives — and `restart: always` keeps it up.
 
 ## Runtime files and external services
 
