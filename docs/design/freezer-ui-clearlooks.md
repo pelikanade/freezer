@@ -87,7 +87,7 @@ The whole stack is one floating window on a desktop backdrop:
 | Region | Target |
 |--------|--------|
 | Repos | Treeview first (ops write surface): Name · Forge · Last built · Latest job · Build now |
-| Jobs | **Recent jobs** as a sunken GtkTreeView below repos: columns Status · Entry · Job · Started · Duration · Result · Action; group rows by `(repo, commit)` with a rowspan identity column. The columns are fixed and sized to their content — Started carries a full `YYYY-MM-DD HH:MM:SS UTC` stamp and Duration an hour-long elapsed time, both `nowrap` — so between 641 and 1100px the Result column drops out (as it already does ≤640px) and the treeview scrolls sideways past 919px rather than scaling the rest: a scaled `nowrap` column paints over its neighbour |
+| Jobs | **Recent jobs** as a sunken GtkTreeView below repos: columns Status · Entry · Job · Started · Duration · Result · Action; group rows by `(repo, commit)` with a rowspan identity column. The columns are fixed and sized to their content — Started carries a browser-relative `x min ago` label (absolute `YYYY-MM-DD HH:MM:SS UTC` on hover, with a server-rendered fallback) and Duration an hour-long elapsed time, both `nowrap` — so between 641 and 1100px the Result column drops out (as it already does ≤640px) and the treeview scrolls sideways past 841px rather than scaling the rest: a scaled `nowrap` column paints over its neighbour |
 | Feedback | Optional InfoBar from `?notice=` (see § Feedback) |
 | Empty | Empty row inside the jobs treeview; repos empty-state is a separate dashed well only if config is empty |
 
@@ -298,7 +298,7 @@ Primary: CSS-only — wrap the transcript in a flex column-reverse scroller so t
 
 ## 9. Build notes
 
-1. No JS required; progressive enhancement optional (scroll-to-end, scroll-restore after meta refresh) and must degrade cleanly.
+1. No JS required; progressive enhancement optional (browser-relative Started labels, scroll-to-end, scroll-restore after meta refresh) and must degrade cleanly.
 2. Icons as original SVGs in the Tango palette — do not vendor icon theme files.
 3. Open the mock while implementing: `docs/design/prototypes/freezer-clearlooks.html` (static HTML; fake data is fine).
 4. Detect matched-nothing as succeeded with no cache hit, zero paths, and a transcript that says the glob matched nothing (or store a flag later); do not invent a new persisted status without an ADR.

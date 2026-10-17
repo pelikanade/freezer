@@ -165,12 +165,13 @@ h1, h2 { margin: 0; font-weight: bold; }
 .tv .entry a { font-family: var(--fz-mono); font-size: 12px; text-decoration: none; }
 .tv .entry a:hover { text-decoration: underline; }
 .tv .num { width: 130px; text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; }
-/* 188px holds "2026-10-16 01:18:18 UTC" (168px on this font stack) and its
-   2×7px padding. Both cells are nowrap, and a column narrower than its text
-   paints over the next one instead of wrapping, so these two carry their
-   content width; the columns that can lose width (.grp, .res) are the ones
-   that give it up. */
-.tv .when { width: 188px; white-space: nowrap; font-variant-numeric: tabular-nums; overflow: hidden; }
+/* 110px holds the widest relative label ("59 min ago") and the 10-character
+   UTC date fallback for jobs older than 30 days, both inside 2×7px padding;
+   the absolute stamp stays available in the title. Both cells are nowrap, and
+   a column narrower than its text paints over the next one instead of
+   wrapping, so these two carry their content width; the columns that can
+   lose width (.grp, .res) are the ones that give it up. */
+.tv .when { width: 110px; white-space: nowrap; font-variant-numeric: tabular-nums; overflow: hidden; }
 .tv .res { width: 145px; color: var(--fz-muted); max-width: 26ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .tv .act { text-align: right; width: 105px; white-space: nowrap; }
 .tv .act form { margin: 0; }
@@ -268,13 +269,13 @@ h1, h2 { margin: 0; font-weight: bold; }
    one, so the fixed columns keep their widths down to 641px and the shortfall
    goes to the treeview's scroller instead. The Result column drops out below
    1101px (it repeats what the status icon and word already say, and ≤640px
-   hides it too), which leaves 779px of fixed columns; the floor adds 140px for
+   hides it too), which leaves 701px of fixed columns; the floor adds 140px for
    the entry, the narrowest that still shows a path rather than one character
    per line. Above 1101px the declared widths leave the entry 148px or more on
    their own, so no floor is needed there. */
 @media (max-width: 1100px) and (min-width: 641px) {
   .tv .res { display: none; }
-  .tv.jobs table { min-width: 919px; }
+  .tv.jobs table { min-width: 841px; }
   /* The desktop strip costs this band 34px, which is more than the repositories
      table's unspecified Last-built column was living on: it scaled to zero and
      painted over Latest job. Same floor as the jobs table — 645px of declared
