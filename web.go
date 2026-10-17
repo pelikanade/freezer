@@ -58,6 +58,8 @@ var pages = template.Must(template.New("pages").Funcs(template.FuncMap{
 		return s
 	},
 	"clock":    func(t time.Time) string { return t.Format("2006-01-02 15:04:05 UTC") },
+	"iso":      func(t time.Time) string { return t.Format(time.RFC3339) },
+	"ago":      func(t time.Time) string { return humanAgo(time.Now(), t) },
 	"duration": jobDuration,
 	"label": func(r Result) string {
 		if r.MatchedNothing {
@@ -75,6 +77,25 @@ var pages = template.Must(template.New("pages").Funcs(template.FuncMap{
 		return s
 	},
 }).ParseFS(webFiles, "web/*.html"))
+
+// humanAgo is the no-JavaScript fallback for a relative timestamp; app.js
+// recomputes it in the browser so a paused page still ages. The 30-day cutoff
+// matches app.js: past it the date is more useful than a growing day count.
+func humanAgo(now, then time.Time) string {
+	d := now.Sub(then)
+	switch {
+	case d < time.Minute:
+		return "just now"
+	case d < time.Hour:
+		return fmt.Sprintf("%d min ago", int(d/time.Minute))
+	case d < 24*time.Hour:
+		return fmt.Sprintf("%d h ago", int(d/time.Hour))
+	case d < 30*24*time.Hour:
+		return fmt.Sprintf("%d d ago", int(d/(24*time.Hour)))
+	default:
+		return then.Format("2006-01-02")
+	}
+}
 
 func jobDuration(j Job) string {
 	// A job that never took a build slot has no start to measure from; the
@@ -157,6 +178,7 @@ func resultSummary(j Job) string {
 func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /static/style.css", func(w http.ResponseWriter, r *http.Request) { http.ServeFileFS(w, r, webFiles, "web/style.css") })
+	mux.HandleFunc("GET /static/app.js", func(w http.ResponseWriter, r *http.Request) { http.ServeFileFS(w, r, webFiles, "web/app.js") })
 	mux.HandleFunc("GET /{$}", s.index)
 	mux.HandleFunc("GET /jobs/{id}", s.jobPage)
 	mux.HandleFunc("GET /jobs/{id}/log", s.jobTranscript)
