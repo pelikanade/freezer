@@ -2,7 +2,7 @@
 
 A self-hosted build service for nix flakes. It polls the registered GitHub repositories, builds what their build lists declare, and publishes the results to a public, signed, S3-compatible binary cache (Cloudflare R2), so consumers substitute them instead of rebuilding.
 
-Status: implementation complete through the local v2 deliverables: build loop, service, Clearlooks UI, retention, flake package, container image and repair runbook. Real-host/R2 acceptance remains pending; see [ROADMAP.md](ROADMAP.md) and the [runbook](docs/runbook.md).
+Status: implementation complete through the local v2 deliverables: build loop, service, Clearlooks UI, retention, flake package, NixOS module and repair runbook. Real-host/R2 acceptance remains pending; see [ROADMAP.md](ROADMAP.md) and the [runbook](docs/runbook.md).
 
 ## Problem
 
@@ -15,14 +15,14 @@ It is for one admin running it on their own host for their own public repositori
 **Product surfaces**
 
 - **Trigger input**: the poll interval. Every registered repository's default-branch head is resolved at start and on each interval afterwards, and a head that is not the commit last built starts an event. Nothing inbound is needed — there is no webhook route, no signature to check and no way in from outside the UI.
-- **Web UI**, the only control surface: home (repositories and recent jobs), job page (details and transcript), and the Build now and Stop actions. There is no CLI. Anything the UI can't do is a config edit and a restart.
-- **Server config file**, edited by the admin: registered repositories, cache target, signing key path, glob cap, global build cap, job timeout, retention, poll interval, and the GitHub token.
+- **Web UI**, the only control surface: home (repositories and recent jobs), job page (details and transcript), and the Build now and Stop actions. There is no CLI. Anything the UI can't do is a `services.freezer` option change and a `nixos-rebuild switch`.
+- **Server settings**, declared as NixOS options: registered repositories, cache target, signing key path, glob cap, global build cap, job timeout, retention, poll interval, and the listen address. The module generates the binary's YAML from them; credentials stay in an environment file.
 - **Build-list file** in each repository (`.freezer.yaml`): the repository's build list, and nothing else.
 
 **External pieces**
 
 - **GitHub**: commit statuses out (one shared service token). Nothing comes in: pushes are found by polling the branch head.
-- **Nix** (≥ 2.33): does all building, publishing, and cache probing. The container image carries it; running the binary directly uses the host's daemon.
+- **Nix** (≥ 2.33): does all building, publishing, and cache probing. The NixOS module asserts the host daemon's version and puts the package on the service's PATH.
 - **The S3-compatible bucket** (R2), read publicly through a custom domain. Freezer never serves the cache itself.
 - **A reverse proxy** (or an SSH tunnel to a localhost bind) in front of the UI. It provides TLS and access control.
 
@@ -32,7 +32,7 @@ Terms are defined in [GLOSSARY.md](GLOSSARY.md). The reasons for each choice are
 
 ### Push, build, publish
 
-A push is found, not delivered. The service resolves each registered repository's default-branch head at start and every `poll_interval` afterwards; a head that is not the commit last built starts a build event. Nothing arrives from outside, so there is no signature to check, no inbound route to expose and no way to lose a push: an event missed while the service was down is found by the next poll.
+A push is found, not delivered. The service resolves each registered repository's default-branch head at start and every poll interval afterwards; a head that is not the commit last built starts a build event. Nothing arrives from outside, so there is no signature to check, no inbound route to expose and no way to lose a push: an event missed while the service was down is found by the next poll.
 
 1. A poll resolves the repository's default-branch head through git (`git ls-remote --symref`). Repositories that are not registered are never resolved — registration is the whole allowlist.
 2. The event goes into the repository's queue, which holds one waiting event. A newer event replaces it — except that nothing displaces a waiting Build now, whose reachability matters more than a coalesced poll — and a running event is never cancelled by a later one. One event runs per repository at a time, and different repositories run in parallel. A superseded event leaves no trace and gets no commit status. An event whose head is unchanged ends at the last-built check in step 3, so polling costs one resolution per repository per interval and nothing else.
@@ -85,47 +85,46 @@ entries:
   - legacyPackages.x86_64-linux.my-tools-*
 ```
 
-Only the final attribute component may contain a glob (`*`, `?`, or character classes). Quoted Nix attribute names are accepted; output selectors (`^dev`, `^*`) are not. Unknown YAML fields and invalid entries reject the build list before Nix runs. `glob_cap` defaults to 200 total glob matches per event; a pattern that would exceed the remaining allowance fails entirely. `job_timeout` defaults to `1h` and includes evaluation, probing and publication. The signing key is passed by filename to Nix and is never read by Freezer.
+Only the final attribute component may contain a glob (`*`, `?`, or character classes). Quoted Nix attribute names are accepted; output selectors (`^dev`, `^*`) are not. Unknown YAML fields and invalid entries reject the build list before Nix runs. `globCap` defaults to 200 total glob matches per event; a pattern that would exceed the remaining allowance fails entirely. `jobTimeout` defaults to `1h` and includes evaluation, probing and publication. The signing key is passed by filename to Nix and is never read by Freezer.
 
 Nix invocations separate options from paths with `--` and preserve evaluated path bytes. A probe is a hit only when Nix succeeds and reports that exact path; option-like values or extra whitespace cannot masquerade as a different published path. Static HTTP assets are limited to the stylesheet; templates are rendered only by the application.
 
 ## Running the service
 
-The deployment route is one container under rootless Podman:
+Freezer is deployed as a systemd service by the flake's NixOS module. The service runs the packaged binary against the host's Nix daemon:
 
-```sh
-podman build -t freezer:0.2.3 .
+```nix
+{
+  inputs.freezer.url = "github:pelikanade/freezer";
+
+  # ...
+  imports = [ freezer.nixosModules.default ];
+  services.freezer = {
+    enable = true;
+    environmentFile = "/run/secrets/freezer-environment";
+    publicUrl = "https://freezer.example.com";
+    cache = {
+      bucket = "public-nix-cache";
+      endpoint = "https://ACCOUNT_ID.r2.cloudflarestorage.com";
+    };
+    repositories = [
+      {
+        name = "personal-flake";
+        url = "https://github.com/OWNER/REPOSITORY.git";
+        github = "OWNER/REPOSITORY";
+      }
+    ];
+  };
+}
 ```
 
-The image carries Nix 2.34.8, git and curl, so the host needs no Nix of its own, and the service drives the Nix inside the container. `deploy/` holds the compose file that pins the deployment (image tag, port, mounts, environment, health check, restart policy and the container capabilities Nix's sandbox needs) plus example configuration and environment files; [the runbook](docs/runbook.md#deploy-as-a-container) covers the image, secrets, the compose project, R2, public-domain substitution, self-hosting, retention and repair.
+The module creates the `freezer` service account, owns `/var/lib/freezer` through systemd's `StateDirectory`, puts git and the host's Nix on the service's PATH, and applies the unit hardening. It asserts Nix ≥ 2.33 and does not change the host's Nix settings. It generates the server YAML from the options and passes that file to the binary, so no YAML is written by hand. Required options are `environmentFile`, `cache.bucket`, `cache.endpoint` and at least one repository; `cache.signingKey` defaults to `/var/lib/freezer/signing.key`, `listen` to `127.0.0.1:8080`, `pollInterval` to `15m`, `jobTimeout` to `1h`, `globalBuildCap` to 3, `globCap` to 200 and `retention` to 1000. `deploy/freezer.example.env` is the environment-file template; [the runbook](docs/runbook.md#install-on-nixos) covers file ownership, secrets, R2, public-domain substitution, self-hosting, retention and repair.
 
-Running the binary directly is also supported: `devenv shell -- go build -o .devenv/freezer .`, or `nix build` and then `./result/bin/freezer /path/to/server.yaml` (`packages.<system>.default`). That route uses the host's Nix, so the host's daemon must be at least 2.33 (2.34 tested); use at least 2.33.6 for the backported path-addressing option when selecting the 2.33 series. The binary has one mode and takes only the configuration filename. Bind to localhost behind an authenticated reverse proxy or SSH tunnel; nothing needs to be reachable from outside, because triggering is polling.
+For development, `devenv shell -- go build -o .devenv/freezer .` and run `./.devenv/freezer /path/to/server.yaml`; `nix build` produces the same binary at `./result/bin/freezer` (`packages.<system>.default`). That direct route also uses the host's Nix, so the daemon must be at least 2.33 (2.34 tested); use at least 2.33.6 for the backported path-addressing option when selecting the 2.33 series. The binary has one mode and takes only the configuration filename. Bind to localhost behind an authenticated reverse proxy or SSH tunnel; nothing needs to be reachable from outside, because triggering is polling.
 
-```yaml
-# Container deployments must listen on 0.0.0.0; the binary route binds loopback.
-listen: 0.0.0.0:8080
-state_dir: /var/lib/freezer
-global_build_cap: 3
-glob_cap: 200
-job_timeout: 1h
-retention: 1000
-# Required and positive: polling is the only trigger. 10m to 1h is the usual
-# range; a poll costs one branch resolution per repository.
-poll_interval: 15m
-public_url: https://freezer.example.com
-cache:
-  bucket: public-nix-cache
-  endpoint: https://ACCOUNT_ID.r2.cloudflarestorage.com
-  signing_key: /etc/freezer/signing.key
-repositories:
-  - name: personal-flake
-    url: https://github.com/OWNER/REPOSITORY.git
-    github: OWNER/REPOSITORY
-```
+Set `GITHUB_TOKEN` in the environment file to a shared token allowed to create commit statuses. Nix reads `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY` from the same environment file. The generated configuration is in the Nix store and contains only public repository names, URLs, the cache endpoint and the signing-key path; it carries no credentials. Register public repositories only; all published outputs are public. `githubApiBase` defaults to `https://api.github.com` and exists as the network test seam.
 
-Set `GITHUB_TOKEN` (or the private config's `github_token`) to a shared token allowed to create commit statuses. Nix reads `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY` from the environment. Keep the server config private: it names the repositories you publish for and may carry the GitHub token. Register public repositories only; all published outputs are public. `github_api_base` defaults to `https://api.github.com` and exists as the network test seam.
-
-State lives in `state_dir/freezer.sqlite`; persistent checkouts live under `state_dir/checkouts/`. Restarting loses queued events and marks running jobs interrupted, retaining the transcript already recorded. Build now and Stop are HTML form actions. Job history, paging and full plain-text transcripts require no JavaScript. The last-built commit survives a restart.
+State lives in `/var/lib/freezer/freezer.sqlite`; persistent checkouts live under `/var/lib/freezer/checkouts/`. Restarting loses queued events and marks running jobs interrupted, retaining the transcript already recorded. Build now and Stop are HTML form actions. Job history, paging and full plain-text transcripts require no JavaScript. The last-built commit survives a restart.
 
 `retention` keeps the newest N jobs per repository (default 1000). It runs at startup and after each event; old job rows and their transcripts are deleted together. Running jobs are protected. Per-repository last-built state is independent of retained history. SQLite does not shrink the database file automatically; reclaiming space with `VACUUM` remains an admin operation.
 
