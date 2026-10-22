@@ -13,9 +13,9 @@ Below 2.33 there is no `endpoint` parameter at all — the older S3 backend spea
 
 ## Consequences
 
-- The floor is stated in the README and satisfied by construction in the container image, which pins Nix 2.34.8, and the implementation's first test is publish-and-substitute against an empty bucket: it exercises the whole URL-parameter story — endpoint, region, addressing, compression, signing, multipart — against whatever Nix the deployment actually runs.
-- **Nothing validates the version at startup** (ADR 0008): a host on an older nix produces nix's own confusing error rather than a clear "your nix is too old".
-- The floor is a property of the Nix that runs Freezer, not of the flake: pinning nixpkgs in freezer's own flake pins the package that is built, not the toolchain that publishes. The container image is where the two arrive together.
+- The floor is stated in the README and enforced by the NixOS module's assertion on `config.nix.package`; the implementation's first test is publish-and-substitute against an empty bucket: it exercises the whole URL-parameter story — endpoint, region, addressing, compression, signing, multipart — against whatever Nix the deployment actually runs.
+- The module fails evaluation with a clear message on an older Nix instead of letting nix produce its own confusing error. A direct binary run outside the module has no runtime check (ADR 0008).
+- The floor is a property of the Nix that runs Freezer, not of the flake: pinning nixpkgs in freezer's own flake pins the package that is built, not the toolchain that publishes. The NixOS module is where the package and the host `nix.package` arrive together.
 
 ## Considered Options
 

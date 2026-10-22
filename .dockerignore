@@ -1,7 +1,0 @@
-# The build stage copies files explicitly; this keeps the context small.
-.git
-.devenv
-.direnv
-.project-map
-result
-result-*
