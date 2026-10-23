@@ -100,7 +100,7 @@ func newFixture(t *testing.T) fixture {
 func (f fixture) repo() string             { return filepath.Join(f.dir, "repo") }
 func (f fixture) entry(name string) string { return "packages." + f.system + "." + name }
 func (f fixture) config() Config {
-	return Config{Cache: CacheConfig{Bucket: f.bucket, Endpoint: f.endpoint, SigningKey: f.key}, GlobCap: 200, JobTimeout: time.Minute}
+	return Config{Cache: &CacheConfig{Bucket: f.bucket, Endpoint: f.endpoint, SigningKey: f.key}, GlobCap: 200, JobTimeout: time.Minute}
 }
 func (f fixture) out(t *testing.T, name string) string {
 	return nix(t, "eval", "--raw", f.repo()+"#"+f.entry(name)+".outPath")

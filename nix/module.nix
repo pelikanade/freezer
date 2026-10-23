@@ -1,5 +1,11 @@
 { self }:
-{ config, lib, pkgs, utils, ... }:
+{
+  config,
+  lib,
+  pkgs,
+  utils,
+  ...
+}:
 
 let
   cfg = config.services.freezer;
@@ -15,13 +21,16 @@ let
     retention = cfg.retention;
     poll_interval = cfg.pollInterval;
     github_api_base = cfg.githubApiBase;
+    repositories = map (repo: { inherit (repo) name url github; }) cfg.repositories;
+  }
+  // lib.optionalAttrs (cfg.cache != null) {
     cache = {
       bucket = cfg.cache.bucket;
       endpoint = cfg.cache.endpoint;
       signing_key = cfg.cache.signingKey;
     };
-    repositories = map (repo: { inherit (repo) name url github; }) cfg.repositories;
-  } // lib.optionalAttrs (cfg.publicUrl != null) {
+  }
+  // lib.optionalAttrs (cfg.publicUrl != null) {
     public_url = cfg.publicUrl;
   };
 
@@ -29,7 +38,7 @@ let
 in
 {
   options.services.freezer = {
-    enable = lib.mkEnableOption "Freezer, a Nix flake build service publishing to a signed S3 binary cache";
+    enable = lib.mkEnableOption "Freezer, a Nix flake build service";
 
     package = lib.mkOption {
       type = lib.types.package;
@@ -37,7 +46,8 @@ in
       defaultText = lib.literalExpression "freezer.packages.<system>.default";
       description = ''
         Freezer executable. It shells out to git and the host's Nix, which do
-        every build, probe and copy.
+        every build, probe and copy; probe and copy run only when `cache` is
+        set.
       '';
     };
 
@@ -45,10 +55,10 @@ in
       type = lib.types.str;
       example = "/run/secrets/freezer-environment";
       description = ''
-        Absolute path to a systemd environment file holding `GITHUB_TOKEN`,
-        `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY`. systemd reads it as
-        root before dropping to the `freezer` user, so it can be root-owned
-        with mode 0600.
+        Absolute path to a systemd environment file holding `GITHUB_TOKEN`.
+        When `cache` is set it also holds `AWS_ACCESS_KEY_ID` and
+        `AWS_SECRET_ACCESS_KEY`. systemd reads it as root before dropping to
+        the `freezer` user, so it can be root-owned with mode 0600.
       '';
     };
 
@@ -68,7 +78,7 @@ in
     jobTimeout = lib.mkOption {
       type = lib.types.str;
       default = "1h";
-      description = "Go duration allowed per job, including evaluation, probing and publication.";
+      description = "Go duration allowed per job, including evaluation, probing and publication when a cache is configured.";
     };
 
     globalBuildCap = lib.mkOption {
@@ -102,49 +112,62 @@ in
       description = "GitHub API base URL. Mainly a test seam.";
     };
 
-    cache = {
-      bucket = lib.mkOption {
-        type = lib.types.str;
-        example = "public-nix-cache";
-        description = "One S3 bucket, flat namespace, without a prefix.";
-      };
+    cache = lib.mkOption {
+      type = lib.types.nullOr (
+        lib.types.submodule {
+          options = {
+            bucket = lib.mkOption {
+              type = lib.types.str;
+              example = "public-nix-cache";
+              description = "One S3 bucket, flat namespace, without a prefix.";
+            };
 
-      endpoint = lib.mkOption {
-        type = lib.types.str;
-        example = "https://ACCOUNT_ID.r2.cloudflarestorage.com";
-        description = "HTTP(S) endpoint of the S3-compatible API, without credentials, query or fragment.";
-      };
+            endpoint = lib.mkOption {
+              type = lib.types.str;
+              example = "https://ACCOUNT_ID.r2.cloudflarestorage.com";
+              description = "HTTP(S) endpoint of the S3-compatible API, without credentials, query or fragment.";
+            };
 
-      signingKey = lib.mkOption {
-        type = lib.types.str;
-        default = "${stateDir}/signing.key";
-        description = ''
-          Absolute runtime path to the ed25519 binary-cache signing key. Nix
-          opens it when copying; Freezer never reads it. Keep it outside the
-          Nix store, readable by the `freezer` user.
-        '';
-      };
+            signingKey = lib.mkOption {
+              type = lib.types.str;
+              default = "${stateDir}/signing.key";
+              description = ''
+                Absolute runtime path to the ed25519 binary-cache signing key. Nix
+                opens it when copying; Freezer never reads it. Keep it outside the
+                Nix store, readable by the `freezer` user.
+              '';
+            };
+          };
+        }
+      );
+      default = null;
+      description = ''
+        S3-compatible cache to publish to. Leave null to build into the host
+        store only; another server, such as Harmonia, can then serve that store.
+      '';
     };
 
     repositories = lib.mkOption {
-      type = lib.types.listOf (lib.types.submodule {
-        options = {
-          name = lib.mkOption {
-            type = lib.types.strMatching "[A-Za-z0-9][A-Za-z0-9_-]*";
-            description = "Unique safe path component used for the checkout directory and URLs.";
+      type = lib.types.listOf (
+        lib.types.submodule {
+          options = {
+            name = lib.mkOption {
+              type = lib.types.strMatching "[A-Za-z0-9][A-Za-z0-9_-]*";
+              description = "Unique safe path component used for the checkout directory and URLs.";
+            };
+            url = lib.mkOption {
+              type = lib.types.str;
+              example = "https://github.com/OWNER/REPOSITORY.git";
+              description = "Git remote URL. Register public repositories only.";
+            };
+            github = lib.mkOption {
+              type = lib.types.strMatching "[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+";
+              example = "OWNER/REPOSITORY";
+              description = "GitHub owner/name used for commit statuses.";
+            };
           };
-          url = lib.mkOption {
-            type = lib.types.str;
-            example = "https://github.com/OWNER/REPOSITORY.git";
-            description = "Git remote URL. Register public repositories only.";
-          };
-          github = lib.mkOption {
-            type = lib.types.strMatching "[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+";
-            example = "OWNER/REPOSITORY";
-            description = "GitHub owner/name used for commit statuses.";
-          };
-        };
-      });
+        }
+      );
       default = [ ];
       description = "Repositories whose default branches are polled and built. At least one is required.";
     };
@@ -157,7 +180,7 @@ in
         message = "services.freezer.environmentFile must be an absolute runtime path.";
       }
       {
-        assertion = lib.hasPrefix "/" cfg.cache.signingKey;
+        assertion = cfg.cache == null || lib.hasPrefix "/" cfg.cache.signingKey;
         message = "services.freezer.cache.signingKey must be an absolute runtime path.";
       }
       {
@@ -185,8 +208,14 @@ in
       description = "Freezer Nix flake build service";
       wantedBy = [ "multi-user.target" ];
       wants = [ "network-online.target" ];
-      after = [ "network-online.target" "nix-daemon.socket" ];
-      path = [ pkgs.git config.nix.package ];
+      after = [
+        "network-online.target"
+        "nix-daemon.socket"
+      ];
+      path = [
+        pkgs.git
+        config.nix.package
+      ];
       unitConfig.ConditionPathExists = cfg.environmentFile;
       environment = {
         HOME = stateDir;
@@ -201,7 +230,10 @@ in
         StateDirectory = "freezer";
         StateDirectoryMode = "0700";
         WorkingDirectory = stateDir;
-        ExecStart = utils.escapeSystemdExecArgs [ (lib.getExe cfg.package) configFile ];
+        ExecStart = utils.escapeSystemdExecArgs [
+          (lib.getExe cfg.package)
+          configFile
+        ];
         EnvironmentFile = cfg.environmentFile;
         Restart = "on-failure";
         RestartSec = 5;

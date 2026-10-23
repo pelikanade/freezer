@@ -1,6 +1,6 @@
 # Freezer
 
-A self-hosted build service for nix flakes. It polls the registered GitHub repositories, builds what their build lists declare, and publishes the results to a public, signed, S3-compatible binary cache (Cloudflare R2), so consumers substitute them instead of rebuilding.
+A self-hosted build service for nix flakes. It polls the registered GitHub repositories and builds what their build lists declare. With a cache configured it publishes the results to a signed, S3-compatible binary cache; without one it builds into the host store, where another server such as Harmonia can serve them.
 
 Status: implementation complete through the local v2 deliverables: build loop, service, Clearlooks UI, retention, flake package, NixOS module and repair runbook. Real-host/R2 acceptance remains pending; see [ROADMAP.md](ROADMAP.md) and the [runbook](docs/runbook.md).
 
@@ -47,6 +47,14 @@ A push is found, not delivered. The service resolves each registered repository'
    - `success`: every job succeeded, including when every entry was a cache hit (the commit is verified built even though nothing was published). The commit is recorded as last built.
    - `failure`: "N of M entries failed", or the build list couldn't be read.
    - `error`: "stopped by the operator".
+
+### Build without a cache
+
+Leave `services.freezer.cache` unset (or omit `cache` from the server YAML) to
+run Freezer as a builder only. Each job runs `nix build` and leaves the output
+in the host store; there is no probe and nothing is copied. This is the mode to
+pair with a store-serving cache such as Harmonia, which reads `/nix/store`
+directly and signs on the fly.
 
 ### Repair and control
 

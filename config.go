@@ -16,7 +16,7 @@ import (
 )
 
 type Config struct {
-	Cache          CacheConfig   `yaml:"cache"`
+	Cache          *CacheConfig  `yaml:"cache"`
 	GlobCap        int           `yaml:"glob_cap"`
 	JobTimeout     time.Duration `yaml:"job_timeout"`
 	Listen         string        `yaml:"listen"`
@@ -79,17 +79,24 @@ func LoadConfig(filename string) (Config, error) {
 	if cfg.PollInterval <= 0 {
 		return cfg, fmt.Errorf("poll_interval must be positive: polling is the only trigger")
 	}
-	if cfg.Cache.Bucket == "" || strings.ContainsAny(cfg.Cache.Bucket, "/?#@:") {
-		return cfg, fmt.Errorf("cache.bucket must be one bucket name without a prefix")
+	if cfg.Cache != nil {
+		if cfg.Cache.Bucket == "" || strings.ContainsAny(cfg.Cache.Bucket, "/?#@:") {
+			return cfg, fmt.Errorf("cache.bucket must be one bucket name without a prefix")
+		}
+		endpoint, parseErr := url.Parse(cfg.Cache.Endpoint)
+		if parseErr != nil || endpoint.Host == "" || (endpoint.Scheme != "http" && endpoint.Scheme != "https") || endpoint.User != nil || endpoint.RawQuery != "" || endpoint.Fragment != "" {
+			return cfg, fmt.Errorf("cache.endpoint must be an HTTP(S) endpoint without credentials, query or fragment")
+		}
+		if cfg.Cache.SigningKey == "" {
+			return cfg, fmt.Errorf("cache.signing_key is required")
+		}
 	}
-	endpoint, err := url.Parse(cfg.Cache.Endpoint)
-	if err != nil || endpoint.Host == "" || (endpoint.Scheme != "http" && endpoint.Scheme != "https") || endpoint.User != nil || endpoint.RawQuery != "" || endpoint.Fragment != "" {
-		return cfg, fmt.Errorf("cache.endpoint must be an HTTP(S) endpoint without credentials, query or fragment")
+	var err error
+	paths := []*string{&cfg.StateDir}
+	if cfg.Cache != nil {
+		paths = append(paths, &cfg.Cache.SigningKey)
 	}
-	if cfg.Cache.SigningKey == "" {
-		return cfg, fmt.Errorf("cache.signing_key is required")
-	}
-	for _, filenamePath := range []*string{&cfg.Cache.SigningKey, &cfg.StateDir} {
+	for _, filenamePath := range paths {
 		if !filepath.IsAbs(*filenamePath) {
 			*filenamePath, err = filepath.Abs(filepath.Join(filepath.Dir(filename), *filenamePath))
 			if err != nil {

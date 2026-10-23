@@ -154,6 +154,29 @@ func RunJob(ctx context.Context, cfg Config, flake, entry string, force bool, re
 	if record != nil {
 		stream = io.MultiWriter(&transcript, record)
 	}
+	if cfg.Cache == nil {
+		buildStart := transcript.Len()
+		_, err := runNix(ctx, stream, "build", "--no-link", "--print-build-logs", "--", flake+"#"+entry)
+		if err != nil {
+			result.Status = "failed"
+			detail := transcript.Bytes()[buildStart:]
+			if start := bytes.Index(detail, []byte("\nerror:")); start >= 0 {
+				detail = detail[start+1:]
+				if len(detail) > 4096 {
+					result.Error = strings.TrimSpace(string(detail[:4096])) + "\nSee the full transcript for the remaining error."
+				} else {
+					result.Error = strings.TrimSpace(string(detail))
+				}
+			} else {
+				result.Error = fmt.Sprintf("nix build: %v", err)
+			}
+			if ctx.Err() == context.Canceled {
+				result.Status = "stopped"
+			}
+		}
+		result.Transcript = transcript.String()
+		return result
+	}
 	out, err := runNix(ctx, stream, "eval", "--raw", "--option", "allow-import-from-derivation", "false", "--", flake+"#"+entry+".outPath")
 	if err == nil && out != "" && !force {
 		if published, probeErr := runNix(ctx, stream, "path-info", "--store", cfg.Cache.StoreURL(), "--", out); probeErr == nil && strings.TrimSuffix(published, "\n") == out {

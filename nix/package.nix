@@ -24,7 +24,7 @@ buildGoModule {
   doCheck = false;
 
   meta = {
-    description = "Polling Nix flake build service with a signed S3 binary cache";
+    description = "Polling Nix flake build service with optional signed S3 binary-cache publication";
     mainProgram = "freezer";
     platforms = [ "x86_64-linux" "aarch64-linux" ];
   };
